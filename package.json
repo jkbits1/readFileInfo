@@ -1,0 +1,17 @@
+{
+  "name": "readfileinfo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "debug": "node --inspect --inspect-brk index.js",
+    "debug2": "node --inspect --inspect-brk --unhandled-rejections=strict index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "sanctuary": "^3.1.0"
+  }
+}
