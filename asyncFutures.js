@@ -290,11 +290,17 @@ const concatFiles = async path => {
  
   // Future.fork (logFut ('rej')) (logFut ('res')) (dir1e)
 
+  // 
+  // aync/await style-coding on a single future - await is used later on returned value from Future.promise
+  // 
   const p1 = Future.promise (dir1e)
 
   console.log ("p1:", p1)
   console.log ()
 
+  // 
+  // aync/await style-coding with multiple futures - using coroutines/generator function
+  // 
   const go1 = Future.go (function *(){
     const fileInfo = yield readFileF (path('testFiles.txt'))
                                   // :: String
@@ -302,50 +308,30 @@ const concatFiles = async path => {
     console.log ("fileInfo:", fileInfo)
     console.log ()
 
-    const fileNames = S.pipe ([
-      S.lines
-    , S.map (path)
+    const fileNames = yield S.pipe ([
+      S.lines                   // Array String
+    , S.map (path)              // Array String
+    , S.map (readFileF)         // Array (Future Error String)
+
+    // , Future.parallel (5) // this works
+    // 
+    // or
+    // 
+    , S.sequence (Future.Par)   // Future Error (Array String)
+
+    , S.map (S.joinWith (''))   // Future Error String
     ]) 
     (fileInfo)
 
-      // ,                          // :: Future Error String   
-  // , Future.map (S.lines)              // :: Future Error (Array String)
-  // , Future.map (S.map (path))         // :: Future Error (Array String)
-
     return fileNames
-                                
-  // // 
-  // // also works
-  // // , S.map (S.map (path))
-  // // 
-  // // doesn't work - for Future.map, Array doesn't seem to be a Functor
-  // // , Future.map (Future.map (path))
-  
-  // , Future.map (S.map (readFileF))    // :: Future Error (Array (Future Error String))
-  //  
-  // 1) use map() then Sanctuary join to flatten this structure
-  // 
-  // , Future.map (Future.parallel (5))   // :: Future Error (Future Error (Array String))
-  // , S.join                             // :: Future Error (Array String)
-  // 
-  // 2) translates to:
-  // 
-  // , Future.chain (Future.parallel (5)) // :: Future Error (Array String)
-  // 
-  // 3) alternatively: 
-  // 
-  // , S.chain (Future.parallel (5))         // :: Future Error (Array String)
-
-  // , Future.map (S.joinWith (''))          // :: Future Error String
-  // , 
-
   })
 
   Future.fork (logFut ('rej')) (logFut ('res')) (go1)
 
+  // 
+  // await is used later on value returned by Future.promise
+  // 
   const pgo1 = Future.promise (go1)
-
-  // aync await with futures
 
   // rxjs
 
@@ -362,7 +348,7 @@ const main = async () => {
   //   console.log (`${caption}: ${resolveValue}`)
   // }
 
-  // await is only needed if we return a promise (created from a future)
+  // NOTE: await is only needed if we return a promise (created from a future)
   const cf = await concatFiles (commonJoin (process.argv[2]))
 
   console.log ("cf:", cf)
