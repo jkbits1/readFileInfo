@@ -2,6 +2,8 @@ const fs = require('fs').promises;
 const path = require('path');
 const S = require('sanctuary')
 const $ = require('sanctuary-def')
+const Future = require('fluture');
+const { resolve } = require('path');
 
 var filterExtension = ".hmt";
 
@@ -105,7 +107,7 @@ async function getFolderSortedList (folderIndex, callback) {
     const pipe = (...pips) => x => pips.reduceRight((prev, fn) => fn(prev), x)
 
 
-    const testingSanctuary = _ => {
+    const testingSanctuary = async _ => {
       //from: https://stackoverflow.com/questions/51795210/how-do-i-collapse-maybe-monads-in-sanctuary-js
 
       const getTag = tag => S.pipe([
@@ -119,9 +121,8 @@ async function getFolderSortedList (folderIndex, callback) {
 
       const xt = getTag ('a') ({ Tags: 'a=y, b=z' })
 
-      console.log(`xt ${xt}`)
-
-      console.log(`${S.show (xt)}`)
+      // console.log(`xt ${xt}`)
+      // console.log(`${S.show (xt)}`)
 
 
       const getTag2 = tag => S.pipe([
@@ -226,34 +227,29 @@ async function getFolderSortedList (folderIndex, callback) {
       // '(Integer -> String -> String) -> (String -> Integer) -> (String -> String -> String)'
 
       const ms1 = S.map (slice1) (ceil1)
-
-      console.log(`${S.show(ms1)}`)
+      // console.log(`${S.show(ms1)}`)
 
       const ms1a = ms1 ('slice')
-
-      console.log(`${S.show(ms1a)}`)
+      // console.log(`${S.show(ms1a)}`)
 
       const ms1b = ms1a ('slice')
-
-      console.log(`${S.show(ms1b)}`)
+      // console.log(`${S.show(ms1b)}`)
 
       
       const mj1 = S.join (ms1)
-
-      console.log(`${S.show(mj1)}`)
+      // console.log(`${S.show(mj1)}`)
 
       const mj1a = mj1 ('slice')
-
-      console.log(mj1a)
+      // console.log(mj1a)
 
 
 
       const xt2 = getTag2 ('a') ({ Tags: 'a=y, b=z' })
 
-      console.log(`xt2 ${xt2}`)
+      // console.log(`xt2 ${xt2}`)
 
-      console.log(`${S.show (xt2)}`)
-      console.log("") // for breakpoint
+      // console.log(`${S.show (xt2)}`)
+      // console.log("") // for breakpoint
 
 
       // chain :: (a -> Either x b) -> Either x a -> Either x b
@@ -261,12 +257,10 @@ async function getFolderSortedList (folderIndex, callback) {
       const parseJson = S.encase (JSON.parse);
 
       const sJ = S.chain (parseJson) (S.Right ('[1,2,3]'));
-
-      console.log(`${S.show (sJ)}`)
+      // console.log(`${S.show (sJ)}`)
 
       const sJ2 = S.chain (parseJson) (S.Right ('[1'));
-
-      console.log(`${S.show (sJ2)}`)
+      // console.log(`${S.show (sJ2)}`)
 
 
       // https://gitter.im/sanctuary-js/sanctuary?at=5db1858f9c3982150976e2fe
@@ -277,11 +271,11 @@ async function getFolderSortedList (folderIndex, callback) {
       // S.join (f) (x) is equivalent to f (x) (x). :)
 
       const sjoFn = S.join (S.concat) // ('foo')
-      console.log(`${sjoFn}`)
+      // console.log(`${sjoFn}`)
 
       const sjo = sjoFn ('foo')
 
-      console.log(sjo)
+      // console.log(sjo)
 
 
 
@@ -289,7 +283,7 @@ async function getFolderSortedList (folderIndex, callback) {
       // map :: (a -> b) -> (x -> a) -> x -> b
 
       const mFn = S.map ( c => d => c + d ) ( c => c * 2 ) // ( 1 )( 1 )
-      console.log(`${S.show (mFn)}`)
+      // console.log(`${S.show (mFn)}`)
 
       // x            c 
       // a            c 
@@ -297,10 +291,10 @@ async function getFolderSortedList (folderIndex, callback) {
       // b            (d => c + d)
 
       const mFn1 = mFn ( 1 )
-      console.log(`${S.show (mFn1)}`)
+      // console.log(`${S.show (mFn1)}`)
 
       const mFn1a = mFn1 (1)
-      console.log(`${S.show (mFn1a)}`)
+      // console.log(`${S.show (mFn1a)}`)
 
 
       // https://gitter.im/sanctuary-js/sanctuary?at=5db18b66e886fb5aa2e8a9fa
@@ -324,13 +318,13 @@ async function getFolderSortedList (folderIndex, callback) {
       // ]) (S.K (5)) (10)
 
       const kFn = S.chain (x => env => x * env)
-      console.log(`${kFn}`)
+      // console.log(`${kFn}`)
 
       const kFn1 = kFn (S.K (5))
-      console.log(`${kFn1}`)
+      // console.log(`${kFn1}`)
 
       const kFn1a = kFn1 (10)
-      console.log(kFn1a)
+      // console.log(kFn1a)
 
       // m b          Number => Number
       // m a          Number => Number
@@ -344,7 +338,7 @@ async function getFolderSortedList (folderIndex, callback) {
       , S.join
       ]) ('{ "x": { "y": { "z": ["28", "29", "2A"] }}}')
 
-      console.log (`parseJson: ${S.show (xj)}`)
+      // console.log (`parseJson: ${S.show (xj)}`)
 
       const xj1 = S.pipe ([
         // S.parseJson (S.is ($.Array ($.String)))
@@ -358,9 +352,9 @@ async function getFolderSortedList (folderIndex, callback) {
       , S.map (S.sum)
       ]) ('{ "x": { "y": { "z": ["28", "29", "2A"] }}}')
 
-      console.log (`parseJson: ${S.show (xj1)}`)
+      // console.log (`parseJson: ${S.show (xj1)}`)
 
-      console.log ("")
+      // console.log ("")
 
       const xj1a = S.pipe ([
         // S.parseJson (S.is ($.Array ($.String)))
@@ -371,9 +365,9 @@ async function getFolderSortedList (folderIndex, callback) {
       , S.map (S.sum)
       ]) ('{ "x": { "y": { "z": ["28", "29", "2A"] }}}')
 
-      console.log (`parseJson 1a: ${S.show (xj1a)}`)
+      // console.log (`parseJson 1a: ${S.show (xj1a)}`)
 
-      console.log ("")
+      // console.log ("")
 
 
       const redSum = prev => current => prev + current  // doesn't work with reduce
@@ -406,9 +400,9 @@ async function getFolderSortedList (folderIndex, callback) {
       //   return prev + current
       // }, 0)
 
-      console.log(`sum xj2 ${S.show (xj2)}`)
+      // console.log(`sum xj2 ${S.show (xj2)}`)
 
-      console.log ("")
+      // console.log ("")
 
 
       const tags1 = tags => field => {       
@@ -428,7 +422,7 @@ async function getFolderSortedList (folderIndex, callback) {
       const testTags = tags => field => {
         const t1 = tags1 (tags) (field)
 
-        console.log(`t1 ${S.show (t1)}`)
+        // console.log(`t1 ${S.show (t1)}`)
       }
 
       testTags ({Tags: 'a=y, b=z'}) ('a')
@@ -441,7 +435,7 @@ async function getFolderSortedList (folderIndex, callback) {
       // console.log ("")
 
       testTags ({Tags: null}) ('a')
-      console.log ("")
+      // console.log ("")
 
       // TODO
       // consider x.y.z example with Either instead of Maybe
@@ -464,13 +458,38 @@ async function getFolderSortedList (folderIndex, callback) {
       // also, refers to interesting blog:
       // https://james-forbes.com/?/posts/the-perfect-api#!/posts/the-perfect-api
       // 
-      // Mixed with Haskell versions below
+
+      // 
+      // Mixed with Haskell versions below    
+      //            also, various refactorings with pipe etc.
       // 
       // 1) S.lift2 (S.add) (S.Just (3)) (S.Just (5))
       // 2) S.ap (S.map (S.add) (S.Just (3))) (S.Just (5))
       // 3) S.ap(S.ap (S.Just (S.add)) (S.Just (3))) (S.Just (5))
+
       // 
       // 1) S.lift2 (S.add) (S.Just (3)) (S.Just (5))
+
+      // use S.T to create infix version
+      // 
+      // S.lift2 (S.add) (S.Just (3)) 
+      // becomes
+      // S.T (S.Just (3)) ((S.lift2) (S.add))
+      // 
+      // S.lift2 (S.add) (S.Just (3)) (S.Just (5))
+      // becomes
+      // (S.T (S.Just (3)) ((S.lift2) (S.add))) (S.Just (5))
+      // 
+      // const liftedAdd = (S.lift2) (S.add)
+      // (S.T (S.Just (3)) (liftedAdd)) (S.Just (5))
+      // 
+      // with imports
+      // (S.T (Just (3)) (liftedAdd)) (Just (5))
+
+      // 
+      // :t liftA2 (+) (Just 3) (Just 5)
+      // :: Num c => Maybe c
+      // 
 
       const l1 = S.pipe ([
         S.lift2 (S.add)
@@ -479,9 +498,22 @@ async function getFolderSortedList (folderIndex, callback) {
 
       const l1a = l1 (S.Just (5))
 
-      console.log(`l1a ${S.show (l1a)}`)
+      // console.log(`l1a ${S.show (l1a)}`)
       
-      console.log()
+      // console.log()
+
+      // just an experiment - a bit like rwh early file parser
+      //                       operates on a bit of state, passes
+      //                       remainder of state along to next fns
+      const l2 = S.pipe ([
+        S.Pair (S.compose (S.lift2 (S.add)) (S.head))
+      , p => S.Pair ((S.fst (p)) (S.snd (p))) (S.tail (S.snd (p)))
+      , p => (S.fst (p)) (S.chain (S.head) (S.snd (p))) 
+      ]) ([3, 5])
+
+      // console.log(`l2 ${S.show (l2)}`)
+      
+      // console.log()
 
       // 
       // S.lift2 (S.add)
@@ -489,24 +521,52 @@ async function getFolderSortedList (folderIndex, callback) {
       // :t liftA2 (+)
       // :: (Applicative f, Num c) => f c -> f c -> f c
       // 
-      // liftA2 (+) (Just 3) (Just 5)
+      // :t liftA2 (+) (Just 3) (Just 5)
+      // :: Num c => Maybe c
       // 
+
       // 
       // 2) (S.ap (S.map (S.add) (S.Just (3))) (S.Just (5)))
+      //
+      // (S.ap (S.map (S.add) (S.Just (3))) (S.Just (5)))
+      // becomes
+      // S.T (S.map (S.add) (S.Just (3))) (S.ap) (S.Just (5))
+      // 
+      // const mappedAdd = S.map (S.add)
+      // S.T (mappedAdd (S.Just (3))) (S.ap) (S.Just (5))
+      // 
+      // with imports
+      // S.T (mappedAdd (Just (3))) (ap) (Just (5))
+      // 
+      // infix version
+      // S.T (S.map (S.add) (S.Just (3))) (S.ap) (S.Just (5))
+      // becomes
+      // S.T (S.T (S.Just (3)) (S.map (S.add))) (S.ap) (S.Just (5))
+      // 
+      // const mappedAdd = S.map (S.add)
+      // S.T (S.T (S.Just (3)) (mappedAdd) (S.ap) (S.Just (5))
+      // 
+      // with imports
+      // S.T (S.T (Just (3)) (mappedAdd) (ap) (Just (5))
+
+      // 
+      // :t fmap (+) (Just 3) <*> (Just 5)
+      // :: Num b => Maybe b
+      // 
 
       const am1 = S.pipe ([
         S.map (S.add)
       ]) (S.Just (3))
 
-      console.log(`am1 ${S.show (am1)}`)
-      console.log()
+      // console.log(`am1 ${S.show (am1)}`)
+      // console.log()
 
       const am1a = S.pipe ([
         S.ap (am1)
       ]) (S.Just (5))
 
-      console.log(`am1a ${S.show (am1a)}`)
-      console.log()
+      // console.log(`am1a ${S.show (am1a)}`)
+      // console.log()
 
       // 
       // broken down:
@@ -530,13 +590,31 @@ async function getFolderSortedList (folderIndex, callback) {
       // :t fmap (+) (Just 3) <*> (Just 5)
       // :: Num b => Maybe b
       // 
+
       // 
       // 3) S.ap(S.ap (S.Just (S.add)) (S.Just (3))) (S.Just (5))
-      
-      // 3) S.ap(S.ap (S.Just (S.add)) (S.Just (3))) (S.Just (5))
+      // 
+      // :t (Just (+)) <*> (Just 3) <*> (Just 5)
+      // :: Num b => Maybe b
 
       // amended version, more like haskell
+      // pseudo-code 
       //  (S.Just (S.add))  S.ap (S.Just (3))) S.ap  (S.Just (5))
+
+      // use S.T to create haskell-style version
+      // S.ap (S.Just (S.add)) (S.Just (3))
+      // becomes
+      // S.T (S.Just (S.add)) (S.ap) (S.Just (3))
+
+      // S.ap ( S.T (S.Just (S.add)) (S.ap) (S.Just (3))) (S.Just (5))
+      // becomes
+      // S.T (S.T (S.Just (S.add)) (S.ap) (S.Just (3))) (S.ap) (S.Just (5))
+      // 
+      // const justAdd = S.Just (S.add)
+      // S.T (S.T (justAdd) (S.ap) (S.Just (3))) (S.ap) (S.Just (5))
+      // 
+      // with imports
+      // S.T (S.T (justAdd) (ap) (Just (3))) (ap) (Just (5))
 
       const aa1 = S.pipe ([
         S.ap
@@ -550,8 +628,8 @@ async function getFolderSortedList (folderIndex, callback) {
         S.ap (aa1a)
       ]) (S.Just (5))
 
-      console.log(`aa1b ${S.show (aa1b)}`)
-      console.log()
+      // console.log(`aa1b ${S.show (aa1b)}`)
+      // console.log()
 
       // 
       // S.ap (S.Just (S.add))
@@ -681,12 +759,155 @@ async function getFolderSortedList (folderIndex, callback) {
       if (xt1) {
         const xt2 = S.fromMaybe ('') (xt)
 
-        console.log(`xt2 ${xt2}`)
+        // console.log(`xt2 ${xt2}`)
       }
+
+
+      // Future.fork (console.log ) (console.log) (S.encase (JSON.parse)) ('{"foo" = "bar"}')
+
+      const logFut = caption => resolveValue => {
+        console.log (`${caption}: ${resolveValue}`)
+      }
+
+      const r1 = S.I (Future.resolve)
+
+      const answer = Future.resolve (42)
+      const sluggishAnswer = Future.after (200) (43)
+
+      const futureInstance = Future ((rej, res) => {
+        // const job = setTimeout (res, 1000, 42)
+        const job = setTimeout (rej, 1000, 42)
+        return function cancel(){
+          clearTimeout (job)
+        }
+      })
+
+      // this works as async/await
+      const pp1a = await Future.promise (futureInstance).then (
+        s => {logFut ('pp1a resolution')
+      return 1}, 
+      s => {logFut ('pp1a rejection')
+      return 2
+    })
+
+      console.log ('pp1a', pp1a)
+
+      // const ff1 = Future.fork (logFut ('rejection')) (logFut ('resolutionx')) (Future.go (function*() {
+      //   const thing = yield Future.after (20) ('world')
+      //   const message = yield Future.after (20) ('Hello ' + thing)
+      //   return message + '!'
+      // }))
+
+      const ff1 = await Future.promise (Future.go (function*() {
+        const thing = yield Future.after (20) ('world')
+
+      //   const pp3 = await Future.promise (futureInstance).then (
+      //     s => {logFut ('pp3 resolution')
+      //   return 1}, 
+      //   s => {logFut ('pp3 rejection')
+      //   return 2
+      // })
+  
+      //   console.log ('pp3', pp3)
+  
+
+
+        const message = yield Future.after (20) ('Hello ' + thing)
+        return message + '!'
+      })).then (
+        s => {logFut ('ff1 resolution')
+      return 10}, 
+      s => {logFut ('ff1 rejection')
+      return 20
+    })
+
+      console.log ('ff1', ff1)
+
+
+
+      const pp2 = await Future.promise (futureInstance).then (
+        s => {logFut ('pp2 resolution')
+      return 1}, 
+      s => {logFut ('pp2 rejection')
+      return 2
+    })
+
+      console.log ('pp2', pp2)
+
+
+
+      // const fiAnswer = Future.resolve (42)
+
+      // const ans1 = futureInstance (answer)
+
+
+      // const Future = fork => ({fork});
+
+      // Future((rej, res) => res(1)).fork(
+      //   console.error, console.log
+      // );
+
+      const consume = Future.fork (reason => {
+        console.error ('The Future rejected with reason:', reason)
+      }) (value => {
+        // console.log ('The Future resolved with value:', value)
+        logFut ('The Future resolved with value:') (value)
+      })
+
+      // consume (answer)
+      consume (sluggishAnswer)
+
+
+      // const slowAnswer = Future.after (23668200) (42)
+      // const consume2 = Future.value (logFut ('resolution'))
+      // const unsubscribe = consume2 (slowAnswer)
+
+      // setTimeout (unsubscribe, 3000)
+
+      // const slowAnswer = Future.after (23668200) (42)
+      // const consume2 = Future.value (logFut ('resolution'))
+      // const unsubscribe = consume2 (slowAnswer)
+
+      // setTimeout (unsubscribe, 3000)
+
+      // Future.fork (logFut ('rejection')) (logFut ('resolution')) (Future.after (20) (42))
+
+      // const pp1 = await Future.promise (Future.resolve (42)).then (logFut ('resolution'))
+
+      // this works as async await
+      // const pp1 = await Future.promise (Future.after (5000) (42)).then (logFut ('resolution1'))
+
+      function resolveAfter2Seconds() {
+        return new Promise(resolve => {
+          setTimeout(() => {
+            resolve('resolved after 2 secs');
+          }, 2000);
+        });
+      }
+
+      // const result = await resolveAfter2Seconds();
+
+      // const ppp = Future.encase (_ => Future.promise (Future.after (5000) (42))) ('123')
+      const ppp = Future.encaseP (_ => resolveAfter2Seconds()) ('123')
+
+      // const f1 = await Future.fork (logFut ('rejection f1')) (logFut ('resolution f1')) (ppp)
+      // const f1 = await Future.fork (logFut ('rejection f1')) (logFut ('resolution f1')) (ppp)
+
+      // console.log('f1', f1)
+      
+      
+      
+      // const f1 = await Future.fork (logFut ('rejection')) (logFut ('resolution')) (Future.go (function*() {
+      //   const thing = yield Future.after (20) ('world')
+      //   const message = yield Future.after (20) ('Hello ' + thing)
+      //   return message + '!'
+      // }))
+
+      console.log('after fork')
 
     }
 
-    const t = testingSanctuary()
+    const t = await testingSanctuary()
 
 
     const searchSegmentForSeasonInfo = segment => {
