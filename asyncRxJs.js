@@ -3,13 +3,14 @@ const path          = require ('path');
 
 // const Rx = require('rxjs')
 // const {Observable} = require('rxjs')
-const { from } = require('rxjs')
+const { from, concat, bindNodeCallback, of, merge, toPromise } = require('rxjs')
+const { concatAll, flatMap, map, mergeAll } = require('rxjs/operators')
 
 // const S = require('sanctuary')
 // const {sanctuary} = require('sanctuary')
 
 const $ = require ('sanctuary-def');
-const {create, env: Senv, concat} = require ('sanctuary');
+const {create, env: Senv} = require ('sanctuary');
 const {env, FutureType} = require ('fluture-sanctuary-types');
 // const {resolve} = require ('fluture');
 const Future = require('fluture')
@@ -249,7 +250,7 @@ const concatFiles = async path => {
   
   // use standard JS concat on two files
   // Sanctuary - S.lift2
-  const dir1c = S.lift2 (concat) (readFileF ('foo.txt')) (readFileF ('bar.txt'))
+  const dir1c = S.lift2 (S.concat) (readFileF ('foo.txt')) (readFileF ('bar.txt'))
 
   // dir1c - liftA2
   // S.lift2 (f)
@@ -263,17 +264,17 @@ const concatFiles = async path => {
   // and here for Haskell
   // http://learnyouahaskell.com/functors-applicative-functors-and-monoids
 
-  // use standard JS concat on two files
+  // use Sanctuary concat on two files
   // Future ap ... ap
   const dir1d = 
     Future.ap (readFileF ('bar.txt'))
-      (Future.ap (readFileF ('foo.txt')) (S.of (Future.Future) (concat)))
+      (Future.ap (readFileF ('foo.txt')) (S.of (Future.Future) (S.concat)))
  
-  // use standard JS concat on two files
+  // use Sanctuary concat on two files
   // Future map ... ap
   const dir1e = 
     Future.ap (readFileF ('bar.txt'))
-      (Future.map (concat) (readFileF ('foo.txt')))
+      (Future.map (S.concat) (readFileF ('foo.txt')))
  
   // Future.fork (logFut ('rej')) (logFut ('res')) (dir1e)
 
@@ -360,7 +361,7 @@ const concatFiles = async path => {
     //       following Future.resolve/S.of are redundant. They merely
     //       illustrate what is happening in the various steps
     // 
-    const concatMap = yield Future.map (concat) (readFileF ('foo.txt'))
+    const concatMap = yield Future.map (S.concat) (readFileF ('foo.txt'))
                           // before yield :: Future Error (String -> String)
                           // after  yield :: String -> String
 
@@ -394,11 +395,11 @@ const concatFiles = async path => {
   const pgo3 = Future.promise (go3)
 
   // :: Future Error (String -> String)
-  const concatFnFuture = Future.map (concat) (readFileF ('foo.txt'))
+  const concatFnFuture = Future.map (S.concat) (readFileF ('foo.txt'))
 
   // :: Future Error (Future Error (String -> String))
   const concatFnFuture2 = Future.go (function* () {
-    return Future.map (concat) (readFileF ('foo.txt'))
+    return Future.map (S.concat) (readFileF ('foo.txt'))
   })
 
   // :: Future Error (String -> String)
@@ -406,7 +407,7 @@ const concatFiles = async path => {
 
   // :: Future Error (String -> String)
   const concatFnFuture3 = Future.go (function* () {
-    const fn = yield Future.map (concat) (readFileF ('foo.txt'))    
+    const fn = yield Future.map (S.concat) (readFileF ('foo.txt'))    
                     // String -> String
 
     return fn       // Future Error (String -> String)
@@ -479,6 +480,119 @@ const concatFiles = async path => {
 
   // rxjs
 
+  const readFileAsObservable = bindNodeCallback(fs.readFile);
+
+  const result = readFileAsObservable('testFiles.txt', 'utf8');
+
+  const readFileUtf8 = fileName => readFileAsObservable (fileName, 'utf8')
+
+  // const m = map (
+  //   // NOTE: map provides 2 args, so need this simple function
+  //   s => S.lines (s)
+  // ) (result)
+
+  // const mP = await m.toPromise()
+
+  const info1 = of('foo.txt\nbar.txt')      // Observable String
+
+  // info1.subscribe (x => {
+  //   console.log(x)                          // Observable String
+  // }, e => console.error(e));
+
+  const infoLines = info1.pipe (
+    map (s => {
+      return S.lines (s)
+    })                                      // Observable (Array String)
+  , 
+    // map                // Observable (Array (Observable String)) (one array item per file)
+    flatMap               // Observable ((Observable String))       (inner obs sends one item per file)
+    (paths => {
+      return S.map (readFileUtf8) (paths)       // map      - Observable (Array (Observable String))
+                                                // flatmap  - Observable ((Observable String))
+    })
+  , map (s => {
+      return s                                // map      - Observable (Array (Observable String))
+                                                // flatmap  - Observable ((Observable String))
+    })
+  // , map (s => {
+  //     return merge (s)
+  //     // return concat (s[0], s[1])   
+  //     // return concat (s)   
+  //   })
+  // , mergeAll ()
+
+  , concatAll()                                 // map      - Observable ((Observable String))
+                                                // flatmap  - Observable String
+  , map (s => {
+    return s                                    // map      - Observable ((Observable String))
+                                                // flatmap  - Observable String
+  })
+
+  // , concat()                             // Observable ((Observable String)) ??
+
+  // , concatAll()                                 // map - Observable String
+  //                                               // flatmap  - n/a
+  // , map (s => {
+  //   return s                                    // map - Observable String
+  //                                               // flatmap  - n/a
+  // })
+)
+
+  infoLines.subscribe (x => {
+    console.log(x)
+
+  if (x.subscribe) {
+    x.subscribe(x => {
+      console.log(x)
+    }, e => console.error(e));
+  }
+  else if (Array.isArray(x)) {
+    x.forEach(obs => obs.subscribe(x => {
+        console.log(x)
+      }, e => console.error(e))
+    )
+  }
+
+  }, e => console.error(e));
+
+
+  // const lines = result.pipe (S.lines)
+  const lines = result.pipe (
+    map (s => {
+      console.log("pre-lines", s)
+      console.log()
+
+      return S.lines (s)
+    })
+  , map (lines => {
+      return S.map (path) (lines)
+    })
+  , map (paths => {
+      return S.map (readFileUtf8) (paths)
+    })
+  // , mergeAll()
+  , concatAll()
+  )
+  
+  // result.subscribe(x => console.log(x), e => console.error(e));
+  lines.subscribe(x => {
+    console.log(x)
+
+    x.subscribe(x => {
+      console.log(x)
+    }, e => console.error(e));
+
+  }, e => console.error(e));
+
+  // const rxP = await result.toPromise();
+  // const rxP = await lines.toPromise();
+
+  // console.log ("rxp:", rxP)
+  // console.log ()
+
+  console.log ("lines:", lines)
+  console.log ()
+
   // return x
   // return p1
   // return pgo1
@@ -508,7 +622,7 @@ const main = async () => {
   // this works
   // const pp1a = await Future.promise (cf).then (exit0, exit1)
 
-  // this works
+  // this works - RxJs.from
   // const result = from(Future.promise (cf));
 
 // result.subscribe(x => console.log(x), e => console.error(e));
