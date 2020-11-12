@@ -4,7 +4,7 @@ const path          = require ('path');
 // const Rx = require('rxjs')
 // const {Observable} = require('rxjs')
 const { from, concat, bindNodeCallback, of, merge, toPromise } = require('rxjs')
-const { concatAll, flatMap, map, mergeAll } = require('rxjs/operators')
+const { concatAll, flatMap, map, mergeAll, reduce } = require('rxjs/operators')
 
 // const S = require('sanctuary')
 // const {sanctuary} = require('sanctuary')
@@ -482,6 +482,7 @@ const concatFiles = async path => {
 
   const readFileAsObservable = bindNodeCallback(fs.readFile);
 
+  // :: Observable String
   const result = readFileAsObservable('testFiles.txt', 'utf8');
 
   const readFileUtf8 = fileName => readFileAsObservable (fileName, 'utf8')
@@ -493,42 +494,67 @@ const concatFiles = async path => {
 
   // const mP = await m.toPromise()
 
-  const info1 = of('foo.txt\nbar.txt')      // Observable String
+  // const info1 = of('foo.txt\nbar.txt')     // Observable String
+  const fileName = of('testFiles.txt')        // Observable String
 
   // info1.subscribe (x => {
   //   console.log(x)                          // Observable String
   // }, e => console.error(e));
 
-  const infoLines = info1.pipe (
-    map (s => {
-      return S.lines (s)
-    })                                      // Observable (Array String)
+  // NOTES: Approx equivalents to Sanctuary
+  // 
+  //          flatMap is S.chain
+  // 
+  //          RxJs:           x.pipe (map (...), concatAll())
+  //          equivalent of:  x.pipe (flatMap (...))
+  // 
+  //          Sanctuary:      S.pipe ([S.map (...), S.join])
+  //          equivalent of:  S.pipe ([S.chain (...)])
+
+  // const infoLines = info1.pipe (
+  const infoLines = fileName.pipe (
+    map (fileName => path (fileName))
+
+  //   map (fileName => readFileUtf8 (fileName))  // Observable (Observable String)
+  // , concatAll()                                // Observable String
+  // 
+  // translates to:
+  // 
+  , flatMap (fileName => readFileUtf8 (fileName)) // Observable String
+  , map (s => {
+      return s
+    })
+
+  , map (s => S.lines (s))                         // Observable (Array String)
+  , map (lines => S.map (path) (lines))            // Observable (Array String)
   , 
-    // map                // Observable (Array (Observable String)) (one array item per file)
-    flatMap               // Observable ((Observable String))       (inner obs sends one item per file)
+    // map          // Observable (Array (Observable String)) (one array item per file)
+    flatMap         // Observable ((Observable String))       (outer obs sends one obs per file)
     (paths => {
       return S.map (readFileUtf8) (paths)       // map      - Observable (Array (Observable String))
                                                 // flatmap  - Observable ((Observable String))
     })
   , map (s => {
-      return s                                // map      - Observable (Array (Observable String))
+      return s                                  // map      - Observable (Array (Observable String))
                                                 // flatmap  - Observable ((Observable String))
     })
+
   // , map (s => {
-  //     return merge (s)
   //     // return concat (s[0], s[1])   
   //     // return concat (s)   
   //   })
-  // , mergeAll ()
 
-  , concatAll()                                 // map      - Observable ((Observable String))
+  // , concatAll()                              // map      - Observable ((Observable String))
+
+  // merge is parallel operation
+  , mergeAll()                                  // map      - Observable ((Observable String))
                                                 // flatmap  - Observable String
   , map (s => {
     return s                                    // map      - Observable ((Observable String))
                                                 // flatmap  - Observable String
   })
 
-  // , concat()                             // Observable ((Observable String)) ??
+  , reduce ((prev, val) => S.concat (prev) (val), '')
 
   // , concatAll()                                 // map - Observable String
   //                                               // flatmap  - n/a
@@ -548,12 +574,19 @@ const concatFiles = async path => {
   }
   else if (Array.isArray(x)) {
     x.forEach(obs => obs.subscribe(x => {
-        console.log(x)
+        
+      console.log(x)
       }, e => console.error(e))
     )
   }
+  else {
+    exit0(x)
+  }
 
-  }, e => console.error(e));
+  }, e => {
+    console.error(e)
+    exit1(e)
+  });
 
 
   // const lines = result.pipe (S.lines)
