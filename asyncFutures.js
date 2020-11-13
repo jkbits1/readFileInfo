@@ -274,7 +274,25 @@ const concatFiles = async path => {
   const dir1e = 
     Future.ap (readFileF ('bar.txt'))
       (Future.map (concat) (readFileF ('foo.txt')))
- 
+
+  // :: c -> c -> c
+  // concat
+
+  // :: Future Error String
+  // readFileF ('foo.txt')
+
+  // :: (a -> b) -> m a -> m b
+  // map 
+
+  // :: 
+  // (Future.map (concat) (readFileF ('foo.txt')))
+
+  // a    :: c 
+  // b    :: c -> c
+  // m    :: Future Error
+  // m a  :: Future Error String
+  // m b  :: Future Error (String -> String)
+
   // Future.fork (logFut ('rej')) (logFut ('res')) (dir1e)
 
   // 

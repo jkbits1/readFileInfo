@@ -3,14 +3,14 @@ const path          = require ('path');
 
 // const Rx = require('rxjs')
 // const {Observable} = require('rxjs')
-const { from, concat, bindNodeCallback, of, merge, toPromise } = require('rxjs')
-const { concatAll, flatMap, map, mergeAll, reduce } = require('rxjs/operators')
+const { from, combineLatest, concat, bindNodeCallback, of, merge, toPromise } = require('rxjs')
+const { concatAll, filter, flatMap, map, mergeAll, reduce } = require('rxjs/operators')
 
 // const S = require('sanctuary')
 // const {sanctuary} = require('sanctuary')
 
 const $ = require ('sanctuary-def');
-const {create, env: Senv} = require ('sanctuary');
+const {create, env: Senv, traverse} = require ('sanctuary');
 const {env, FutureType} = require ('fluture-sanctuary-types');
 // const {resolve} = require ('fluture');
 const Future = require('fluture')
@@ -485,7 +485,12 @@ const concatFiles = async path => {
   // :: Observable String
   const result = readFileAsObservable('testFiles.txt', 'utf8');
 
+  // :: String -> Observable String
   const readFileUtf8 = fileName => readFileAsObservable (fileName, 'utf8')
+
+  // :: String -> Observable (Array String)
+  const readDirO = bindNodeCallback(fs.readdir)
+
 
   // const m = map (
   //   // NOTE: map provides 2 args, so need this simple function
@@ -562,69 +567,193 @@ const concatFiles = async path => {
   //   return s                                    // map - Observable String
   //                                               // flatmap  - n/a
   // })
-)
+  )
 
   infoLines.subscribe (x => {
     console.log(x)
 
-  if (x.subscribe) {
-    x.subscribe(x => {
-      console.log(x)
-    }, e => console.error(e));
-  }
-  else if (Array.isArray(x)) {
-    x.forEach(obs => obs.subscribe(x => {
-        
-      console.log(x)
-      }, e => console.error(e))
-    )
-  }
-  else {
-    exit0(x)
-  }
+    if (x.subscribe) {
+      x.subscribe(x => {
+        console.log(x)
+      }, e => console.error(e));
+    }
+    else if (Array.isArray(x)) {
+      x.forEach(obs => obs.subscribe(x => {
+          
+        console.log(x)
+        }, e => console.error(e))
+      )
+    }
+    else {
+      // exit0(x)
+    }
 
-  }, e => {
-    console.error(e)
-    exit1(e)
+    }, e => {
+      console.error(e)
+      // exit1(e)
   });
 
 
-  // const lines = result.pipe (S.lines)
-  const lines = result.pipe (
-    map (s => {
-      console.log("pre-lines", s)
-      console.log()
+  // const rxP = await infoLines.toPromise();
+  const rxP = await infoLines.toPromise().catch(e => {
+    console.error(e)
+    exit1(e)
+  })
 
-      return S.lines (s)
-    })
-  , map (lines => {
-      return S.map (path) (lines)
-    })
-  , map (paths => {
-      return S.map (readFileUtf8) (paths)
-    })
-  // , mergeAll()
-  , concatAll()
-  )
-  
-  // result.subscribe(x => console.log(x), e => console.error(e));
-  lines.subscribe(x => {
-    console.log(x)
-
-    x.subscribe(x => {
-      console.log(x)
-    }, e => console.error(e));
-
-  }, e => console.error(e));
-
-  // const rxP = await result.toPromise();
-  // const rxP = await lines.toPromise();
-
-  // console.log ("rxp:", rxP)
-  // console.log ()
-
-  console.log ("lines:", lines)
+  console.log ("rxp:", rxP)
   console.log ()
+
+  const folderName = of ('.')
+
+  const dirO1 = folderName.pipe(
+    flatMap (folderName => readDirO (folderName)) // Observable (Array String)
+  , map (s => {
+      return s
+    })                                            // Observable (Array String)
+  , map (fileNames => S.head (fileNames))         // Observable (Maybe String)
+  , map (fileName => {
+      return S.fromMaybe ('') (fileName)       // Observable String
+    })
+  , map (s => {
+      return s                                    // Observable String
+    })
+  )
+
+  const dirO1a = folderName.pipe(
+    flatMap (folderName => readDirO (folderName)) // Observable (Array String)
+  , map (fileNames => {
+      return S.filter (S.test (/\.js/)) (fileNames)
+    })                                            // Observable (Array String)
+  , map (s => {
+      return s
+    })                                            // Observable (Array String)
+  , map (fileNames => S.head (fileNames))         // Observable (Maybe String)
+  , map (fileName => {
+      return S.fromMaybe ('') (fileName)       // Observable String
+    })
+  , map (s => {
+      return s                                    // Observable String
+    })
+  , flatMap (fileName => readFileUtf8 (fileName))
+                                                 // Observable String
+  // , map (fileName => readFileUtf8 (fileName))    // Observable (Observable String)
+  , map (s => {
+    return s                                // flatmap - Observable String
+                                            // map - Observable (Observable String)
+  })    
+  )
+
+  // 
+  // traverse equivalent - maybe need a reduce as the final step
+  // 
+  const dirO1b = folderName.pipe(
+    flatMap (folderName => readDirO (folderName)) // Observable (Array String)
+  , map (fileNames => {
+      return S.filter (S.test (/\.js/)) (fileNames)
+    })                                            // Observable (Array String)
+  , map (s => {
+      return s
+    })                                            // Observable (Array String)
+
+  , flatMap (fileNames => S.map (readFileUtf8) (fileNames))
+                                                 // Observable (Observable String)
+  // , map (fileName => readFileUtf8 (fileName))    // Observable (Array (Observable String))
+  , map (s => {
+    return s                                // flatmap - Observable (Observable String)
+                                            // map - Observable (Array (Observable String))
+  })  
+
+  , mergeAll()                              // flatmap - Observable String
+                                            // map - Observable (Observable String)
+  , map (s => {
+    return s                                // flatmap - Observable String
+                                            // map - Observable (Observable String)
+  })    
+  )
+
+  const lift1 = combineLatest ([readFileUtf8 ('foo.txt'), readFileUtf8 ('bar.txt')]).pipe(
+    map (([s1, s2]) => S.concat (s1) (s2))
+  , map (s => {
+      return s
+    })
+  )
+
+
+  const fmap1 = readFileUtf8 ('foo.txt').pipe (
+    map (s => S.concat (s))
+  , map (s => {
+      return s
+    })
+  )
+
+  // ap :: Apply m => m a -> m (a -> b) -> m b
+
+  const app1 = combineLatest ([readFileUtf8 ('bar.txt'), fmap1]).pipe(
+    map (([s, f]) => {
+      return f (s)
+    })
+  , map (s => {
+      return s
+    })
+  )
+
+  const appO = (m_a, m_fn) => combineLatest ([m_a, m_fn]).pipe(
+    map (([s, f]) => {
+      return f (s)
+    })
+  , map (s => {
+      return s
+    })
+  )
+
+  const app1a = appO (readFileUtf8 ('bar.txt'), fmap1)
+
+  const appFile1 = appO (readFileUtf8 ('foo.txt'), of (S.concat))
+
+  const app1b = appO (readFileUtf8 ('bar.txt'), appFile1)
+
+
+  // :: Observable String
+  // readFileUtf8 ('foo.txt')
+
+  // :: c -> c -> c
+  // concat
+
+  // :: (a -> b) -> m a -> m b
+  // map (or at least the fn that map returns)
+
+  // m a :: Observable String
+  // m b :: Observable (String -> String)
+
+  // fmap1 :: Observable (String -> String)
+
+
+
+
+
+
+  app1b.subscribe(x => {
+    
+    console.log('dirO1a:', x)
+
+    if (x.subscribe) {
+      x.subscribe(x => {
+        console.log(x)
+      }, e => console.error(e));
+    }
+    else if (Array.isArray(x)) {
+      x.forEach(obs => obs.subscribe(x => {
+          
+        console.log(x)
+        }, e => console.error(e))
+      )
+    }
+    else {
+      // exit0(x)
+    }
+  }, e => {
+    console.error(e)
+  })
 
   // return x
   // return p1
