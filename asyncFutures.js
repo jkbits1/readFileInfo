@@ -9,7 +9,7 @@ const { from } = require('rxjs')
 // const {sanctuary} = require('sanctuary')
 
 const $ = require ('sanctuary-def');
-const {create, env: Senv, concat} = require ('sanctuary');
+const {create, env: Senv} = require ('sanctuary');
 const {env, FutureType} = require ('fluture-sanctuary-types');
 // const {resolve} = require ('fluture');
 const Future = require('fluture')
@@ -247,9 +247,9 @@ const concatFiles = async path => {
   ]) 
   ('.')
   
-  // use standard JS concat on two files
+  // use Sanctuary concat on two files
   // Sanctuary - S.lift2
-  const dir1c = S.lift2 (concat) (readFileF ('foo.txt')) (readFileF ('bar.txt'))
+  const dir1c = S.lift2 (S.concat) (readFileF ('foo.txt')) (readFileF ('bar.txt'))
 
   // dir1c - liftA2
   // S.lift2 (f)
@@ -263,17 +263,17 @@ const concatFiles = async path => {
   // and here for Haskell
   // http://learnyouahaskell.com/functors-applicative-functors-and-monoids
 
-  // use standard JS concat on two files
+  // use Sanctuary concat on two files
   // Future ap ... ap
   const dir1d = 
     Future.ap (readFileF ('bar.txt'))
-      (Future.ap (readFileF ('foo.txt')) (S.of (Future.Future) (concat)))
+      (Future.ap (readFileF ('foo.txt')) (S.of (Future.Future) (S.concat)))
  
-  // use standard JS concat on two files
+  // use Sanctuary concat on two files
   // Future map ... ap
   const dir1e = 
     Future.ap (readFileF ('bar.txt'))
-      (Future.map (concat) (readFileF ('foo.txt')))
+      (Future.map (S.concat) (readFileF ('foo.txt')))
 
   // :: c -> c -> c
   // concat
@@ -285,7 +285,7 @@ const concatFiles = async path => {
   // map 
 
   // :: 
-  // (Future.map (concat) (readFileF ('foo.txt')))
+  // (Future.map (S.concat) (readFileF ('foo.txt')))
 
   // a    :: c 
   // b    :: c -> c
@@ -378,7 +378,7 @@ const concatFiles = async path => {
     //       following Future.resolve/S.of are redundant. They merely
     //       illustrate what is happening in the various steps
     // 
-    const concatMap = yield Future.map (concat) (readFileF ('foo.txt'))
+    const concatMap = yield Future.map (S.concat) (readFileF ('foo.txt'))
                           // before yield :: Future Error (String -> String)
                           // after  yield :: String -> String
 
@@ -412,11 +412,11 @@ const concatFiles = async path => {
   const pgo3 = Future.promise (go3)
 
   // :: Future Error (String -> String)
-  const concatFnFuture = Future.map (concat) (readFileF ('foo.txt'))
+  const concatFnFuture = Future.map (S.concat) (readFileF ('foo.txt'))
 
   // :: Future Error (Future Error (String -> String))
   const concatFnFuture2 = Future.go (function* () {
-    return Future.map (concat) (readFileF ('foo.txt'))
+    return Future.map (S.concat) (readFileF ('foo.txt'))
   })
 
   // :: Future Error (String -> String)
@@ -424,7 +424,7 @@ const concatFiles = async path => {
 
   // :: Future Error (String -> String)
   const concatFnFuture3 = Future.go (function* () {
-    const fn = yield Future.map (concat) (readFileF ('foo.txt'))    
+    const fn = yield Future.map (S.concat) (readFileF ('foo.txt'))    
                     // String -> String
 
     return fn       // Future Error (String -> String)
@@ -496,6 +496,339 @@ const concatFiles = async path => {
   // 
 
   // rxjs
+
+  // Fluture for effects example:
+  // https://gitter.im/sanctuary-js/sanctuary?at=5fc133423afabc22f1598c83
+
+  const saveStateToDiskStd = state => {
+    fs.writeFileSync ('stateTest.json', JSON.stringify (state))
+    const newSize = fs.statSync ('stateTest.json').size
+    return newSize
+  }
+
+  const updateStateStd = (state, updater) => {
+    const newState = updater (state)
+    const newSize = saveStateToDiskStd (newState)
+
+    return {
+      state: newState
+    , size: newSize
+    }
+  }
+
+  // file write occurs here
+  const updateStateStd1 = updateStateStd (41, x => x + 1)    
+
+  // file write occurs again here
+  const updateStateStd1a = updateStateStd (41, x => x + 1)
+
+  console.log (updateStateStd1a)
+
+  //    saveStateToDiskF :: Number -> Future Error Number
+  const saveStateToDiskF = state => {
+
+    //    futureFileSize :: Future Error Number
+    const futureFileSize = S.pipe ([ 
+      state => Future.node (done => fs.writeFile('stateTestF.json', JSON.stringify (state), done))
+
+      // test for failure in first part of Future.and 
+      // state => readFileF ('bar1.txt') 
+                                                                              // Future Error undefined
+    , Future.and (Future.node (done => fs.stat ('stateTestF.json', done)))                       
+                                                                              // Future Error Object
+    , 
+      // Future.map 
+      S.map 
+        (stats => stats.size)                                                 // Future Error Number
+    ])
+    (state)
+
+    return futureFileSize
+  }
+
+  // updateStateF :: (Number, Fn) -> Future Error Object
+  const updateStateF = (state, updater) => { 
+    const newState = updater (state)
+    // const eventualNewSize = saveStateToDiskF (newState)
+
+    //    futureNewSize :: Future Error Number
+    // const futureNewSize = saveStateToDiskF (newState)
+
+    //    futureSizeAndState :: Future Error Object
+    const futureSizeAndState = S.pipe ([ 
+      saveStateToDiskF                                                        // Future Error Number
+      // Future.map 
+    , S.map 
+        (size => ( {size, state: newState} ))
+                                                                              // Future Error Object
+    ])
+    (
+      // eventualNewSize
+      // futureNewSize
+      newState
+    )
+
+    return futureSizeAndState
+  }
+
+  // Future.value (console.log) (updateStateF (41, x => x + 1))
+
+  const logFutFile = caption => resolveValue => {
+    console.log (`${caption}: ${resolveValue.size ? 'fileSize: ' + resolveValue.size : ''}`)
+  }
+
+  // file write does not occur here
+  const updateStateF1 = updateStateF (41, x => x + 1)
+
+  // file write does not occur here either
+  const updateStateF1a = updateStateF (41, x => x + 1)
+
+  // file write occurs here
+  Future.fork (logFutFile ('rej')) (logFutFile ('res')) (updateStateF1a)
+
+
+  // Sanctuary code snippet for creating Pairs @Avaq
+  // https://gitter.im/sanctuary-js/sanctuary?at=5fcbc12ffb7f155587a79874
+  // 
+  // also, here under R.aperture()
+  // https://github.com/sanctuary-js/sanctuary/wiki/Ramda-to-Sanctuary
+
+  const f = S.compose (S.justs) (S.extend (S.take (2)))
+
+  const pairs1 = f ([1, 2, 3, 4])
+
+  console.log (`pairs1: ${S.show (pairs1)}`)
+
+  // S.show (S.extend (S.take (2)) ([1, 2, 3, 4]))
+  // '[Just ([1, 2]), Just ([2, 3]), Just ([3, 4]), Nothing]'
+
+  //   S.show (S.justs (S.extend (S.take (2)) ([1, 2, 3, 4])))
+  // '[[1, 2], [2, 3], [3, 4]]'
+
+  // NOTE: result shown in gitter doesn't match output here
+  const f1 = S.unfoldr (S.lift2 (S.lift2 (S.Pair)) (S.take (2)) (S.drop (2)))
+
+  const pairs2 = f ([1, 2, 3, 4, 5, 6, 7])
+
+  console.log (`pairs2: ${S.show (pairs2)}`)
+
+  
+  // unfoldr :: (Number -> Maybe (Pair Number Number)) -> Number -> Array Number
+
+  // NOTE: Apply f :: function
+  // lift2a :: Apply f => (f (Maybe a) -> f (Maybe b) -> f (Maybe (Pair a b))) -> 
+  //                        f (f (Maybe a)) -> f (f (Maybe b)) -> f (f (Maybe (Pair a b)))
+
+  // lift2a :: Apply f => (a -> b -> c) -> (y -> a) -> (y -> b) -> (b -> Maybe (Pair Number Number))
+
+  // lift2a :: Apply f => (Maybe (Array Number) -> Maybe (Array Number) -> c) -> 
+  //                        (Number -> a) -> (Number -> b) -> 
+  //                        (b -> Maybe (Pair Number Number))
+
+  // S.take :: Number -> Array a -> Maybe (Array a)
+
+  // a      :: Array Number -> Maybe (Array Number)
+  // b      :: Array Number -> Maybe (Array Number)
+
+  // y   :: 
+
+  // f a :: (y -> a)
+  // f b :: (y -> b)
+  
+  // f   :: ((->) y)
+  // f c :: (y -> Maybe (Pair a b))
+  
+  // c   :: Maybe (Pair a b)
+
+  // S.take
+  // f a :: Integer -> Array a -> Maybe (Array a)
+
+  // S.drop
+  // f b :: Integer -> Array b -> Maybe (Array b)
+
+  // lift2b :: Apply f => (Maybe a -> Maybe b -> Maybe (Pair a b)) -> 
+  //                        f (Maybe a) -> f (Maybe b) -> f (Maybe (Pair a b))
+
+  // lift2c :: Apply f => (a -> b -> Pair a b) -> Maybe a -> Maybe b -> Maybe (Pair a b)
+
+  // S.Pair :: a -> b -> Pair a b
+
+  // lift2c (S.Pair) :: Maybe a -> Maybe b -> Maybe (Pair a b)
+  
+  // take :: (Applicative f, Foldable f, Monoid (f a)) => Integer -> Array a -> Maybe (Array a)
+  // drop :: (Applicative f, Foldable f, Monoid (f a)) => Integer -> Array a -> Maybe (Array a)
+
+  const lift2a = S.lift2
+  const lift2b = S.lift2
+  const lift2c = S.lift2
+
+  const f2 = S.compose (S.unfoldr) 
+    (lift2a 
+      (lift2b 
+        (lift2c (S.Pair))
+      ) 
+      (S.take)                        // Integer -> Array a -> Maybe (Array a)
+      (S.drop)                        // Integer -> Array a -> Maybe (Array a)
+    );
+
+//     It's just a heavily church-encoded version of 
+
+  // x => 
+    // S.unfoldr 
+      // (xs => 
+            // S.lift2                // (a -> b -> c) -> f a -> f b -> f c
+            //                        // (Array Number -> Array Number -> Pair Number Number) -> 
+                                      //     Maybe (Array Number) -> Maybe (Array Number) -> 
+                                      //     Maybe (Array Number)
+              // (S.Pair)             // a -> b -> Pair a b
+              //                      // Array Number -> Array Number -> Pair (Array Number) (Array Number)
+              // (S.take (x) (xs))    // Maybe (Array Number)
+              // (S.drop (x) (xs)))   // Maybe (Array Number)
+
+// The remaining lift2 in the unencoded version lifts Pair into the context of the Maybe. The Maybes are created by take and drop, and unfoldr happens to want a Maybe of a Pair.
+
+// The other two lift2 calls are just extra layers of "apply-2-way" to get rid of the lambda wrappers.
+
+// S.unfoldr :: (b -> Maybe (Pair a b)) -> b -> Array a
+
+// S.show (S.Pair ([1,2]) ([3, 4]))
+// 'Pair ([1, 2]) ([3, 4])'
+
+// S.show (S.take (1) ([3, 4]))
+// 'Just ([3])'
+// S.show (S.drop (1) ([3, 4])) 
+// 'Just ([4])'
+
+  const pairs3 = 
+    [
+      f2 (2) ([1, 2, 3, 4, 5, 6]),
+      f2 (3) ([1, 2, 3, 4, 5, 6])
+    ]
+
+  console.log (`pairs3: ${S.show (pairs3)}`)
+  // [
+  //    [[1, 2], [3, 4], [5, 6]]
+  // ,  [[1, 2, 3], [4, 5, 6]]
+  // ]
+
+  // S.unfoldr :: (b -> Maybe (Pair a b)) -> b -> Array a
+  // S.unfoldr :: (Array Number -> Maybe (Pair (Array Number) (Array Number))) -> Array Number -> Array (Array Number)
+
+  // a :: Array Number
+  // b :: Array Number
+
+  //    f3PairPlusListRemainder :: Number -> Array Number -> Maybe (Pair (Array Number) (Array Number))
+  const f3PairPlusListRemainder =   
+      x => 
+      xs => 
+            S.lift2                 // (a -> b -> c) -> 
+                                    //   f a -> f b -> f c
+                                    
+                                    // f   :: Maybe
+                                    // a,b :: Array Number
+                                    // c   :: Pair (Array Number) (Array Number)
+
+                                    // Maybe (Array Number) -> Maybe (Array Number) -> 
+                                    //   Maybe (Pair (Array Number) (Array Number))
+
+              (S.Pair)              // a -> b -> Pair a b
+                                    // Maybe (Array Number) -> Maybe (Array Number) -> 
+                                    //   Pair (Maybe (Array Number)) (Maybe (Array Number))
+
+              (S.take (x) (xs))     // Maybe (Array Number)
+              (S.drop (x) (xs))     // Maybe (Array Number)
+
+  // S.show (f3PairPlusListRemainder (2) ([3,4]))     
+  // 'Just (Pair ([3, 4]) ([]))'              
+
+  //    f3 :: Number -> Array Number -> Array (Array Number)
+  const f3 = 
+  // xs =>
+  x => 
+    S.unfoldr (f3PairPlusListRemainder (x))
+
+  const pairs4 = 
+    f3 (2) 
+    // f3a ([1, 2, 3, 4, 5, 6])
+    //  (2) 
+    ([1, 2, 3, 4, 5, 6])
+          
+  console.log (`pairs4: ${S.show (pairs4)}`)
+
+  console.log ()
+
+  //    f3aPairPlusListRemainder :: Number -> Array Number -> Maybe (Pair (Array Number) (Array Number))
+  const f3aPairPlusListRemainder =   
+      x => 
+      // xs => 
+            (S.lift2                // (a -> b -> c) -> f a -> f b -> f c
+
+                                    // (a -> b -> c) :: fn -> fn -> (fn -> Pair)
+                                    
+                                    // f   :: Maybe 
+                                    // a,b :: Array Number
+                                    // c   :: Pair (Array Number) (Array Number)
+
+                                    // f a -> f b -> f c :: Maybe (Array Number) -> Maybe (Array Number) -> 
+                                    //                        Maybe (Pair (Array Number) (Array Number))
+
+            (S.lift2                // (a -> b -> c) -> 
+
+                                    //   f a -> f b -> f c
+
+                                    // (a -> b -> c) :: (fn -> Maybe) -> (fn -> Maybe) -> 
+                                    //                    Pair (fn -> Maybe) (fn -> Maybe)
+
+                                    // (a -> b -> c) :: fn -> fn -> Pair fn fn
+                                    
+                                    // f   :: Array Number -> 
+                                    // a,b :: Maybe (Array Number)
+                                    // c   :: Pair (Maybe (Array Number)) (Maybe (Array Number))
+
+                                    // f a -> f b -> f c :: Array Number -> Maybe (Array Number) -> 
+                                    //                      Array Number -> Maybe (Array Number) -> 
+                                    //                        Array Number -> 
+                                    //                           Pair (Maybe (Array Number)) 
+                                    //                                (Maybe (Array Number))
+
+              (S.Pair)))            // a -> b -> Pair a b
+
+                                    // (Array Number -> Maybe (Array Number)) -> 
+                                    // (Array Number -> Maybe (Array Number)) -> 
+                                    //    Pair 
+                                    //      (Array Number -> Maybe (Array Number)) 
+                                    //      (Array Number -> Maybe (Array Number))
+                                    // or
+                                    // 
+                                    // (fn -> Maybe) -> (fn -> Maybe) -> 
+                                    //   Pair (fn -> Maybe) (fn -> Maybe)
+                                    
+              (S.take (x))          // Array Number -> Maybe (Array Number)
+              (S.drop (x))          // Array Number -> Maybe (Array Number)
+
+  // S.show (f3aPairPlusListRemainder (2) ([3,4]))   
+  // 'Just (Pair ([3, 4]) ([]))'
+
+  //    f3bPairPlusListRemainder :: Number -> Array Number -> Maybe (Pair (Array Number) (Array Number))
+  const f3bPairPlusListRemainder =   
+      // x => 
+      // xs => 
+            (S.lift2                // (a -> b -> c) -> f a -> f b -> f c
+            (S.lift2                // (a -> b -> c) -> f a -> f b -> f c
+            (S.lift2                // (a -> b -> c) -> f a -> f b -> f c
+                                   // (Array Number -> Array Number -> 
+                                   //   Pair (Array Number) (Array Number)) -> 
+              //                        Maybe (Array Number) -> Maybe (Array Number) -> 
+              //                        Maybe (Pair (Array Number) (Array Number))
+              (S.Pair))))             // a -> b -> Pair a b
+                                   // Array Number -> Array Number -> Pair (Array Number) (Array Number)
+              (S.take)    // Maybe (Array Number)
+              (S.drop)   // Maybe (Array Number)
+
+  // S.show (f3bPairPlusListRemainder (2) ([3,4]))   
+  // 'Just (Pair ([3, 4]) ([]))'
+
+  console.log()
 
   // return x
   // return p1
