@@ -765,16 +765,17 @@ const concatFiles = async path => {
 
                                     // (a -> b -> c) :: fn -> fn -> (fn -> Pair)
                                     
-                                    // f   :: Maybe 
+                                    // f   :: Array Number -> Maybe 
                                     // a,b :: Array Number
                                     // c   :: Pair (Array Number) (Array Number)
 
-                                    // f a -> f b -> f c :: Maybe (Array Number) -> Maybe (Array Number) -> 
-                                    //                        Maybe (Pair (Array Number) (Array Number))
+                                    // f a -> f b -> f c :: Array Number -> Maybe (Array Number) -> 
+                                    //                      Array Number -> Maybe (Array Number) -> 
+                                    //                        Array Number -> Maybe Pair
+                                    //                                                (Array Number) 
+                                    //                                                (Array Number)
 
-            (S.lift2                // (a -> b -> c) -> 
-
-                                    //   f a -> f b -> f c
+            (S.lift2                // (a -> b -> c) -> f a -> f b -> f c
 
                                     // (a -> b -> c) :: (fn -> Maybe) -> (fn -> Maybe) -> 
                                     //                    Pair (fn -> Maybe) (fn -> Maybe)
@@ -813,22 +814,255 @@ const concatFiles = async path => {
   const f3bPairPlusListRemainder =   
       // x => 
       // xs => 
+
+          // (S.lift2 (as an example, not used - after this, no more lifts are possible)
+          // 
+                                    // NOTE: a fourth lift would create this:
+
+                                    // (a -> b -> c) :: fn -> fn -> fn -> Maybe Pair
+                                    
+                                    // f   :: Number -> Array Number -> Maybe Array 
+                                    // a,b :: Number
+                                    // c   :: Maybe Array (Pair Number Number)
+
+                                    // f a -> f b -> f c :: Number -> Array Number -> Maybe (Array Number) -> 
+                                    //                      Number -> Array Number -> Maybe (Array Number) -> 
+                                    //                        Number -> Array Number -> Maybe Array
+                                    //                           Pair Number Number
+
+                                    // S.show (((S.lift2 (S.lift2 (S.lift2 ((S.lift2 (S.Pair)))))) 
+                                    //            (S.take) (S.take) ) (2) ([1,2]) )  
+                                    // 'Just ([Pair (1) (1), Pair (1) (2), Pair (2) (1), Pair (2) (2)])'
+
             (S.lift2                // (a -> b -> c) -> f a -> f b -> f c
+
+                                    // (a -> b -> c) :: fn -> fn -> fn -> Pair Maybe Maybe
+                                    
+                                    // f   :: Number -> Array Number -> Maybe
+                                    // a,b :: Array Number
+                                    // c   :: Maybe Pair Array Number
+                                    //                   Array Number
+
+                                    // f a -> f b -> f c :: Number -> Array Number -> Maybe (Array Number) -> 
+                                    //                      Number -> Array Number -> Maybe (Array Number) -> 
+                                    //                        Number -> Array Number -> Maybe
+                                    //                           Pair Array Number
+                                    //                                Array Number
+
+                                    // S.show (((S.lift2 (S.lift2 ((S.lift2 (S.Pair))))) 
+                                    //            (S.take) (S.take) ) (2) ([1,2]) ) 
+                                    // 'Just (Pair ([1, 2]) ([1, 2]))'
+
             (S.lift2                // (a -> b -> c) -> f a -> f b -> f c
+            
+                                    // (a -> b -> c) :: fn -> fn -> (fn -> Pair fn fn)
+                                    
+                                    // f   :: Number -> Array Number ->  
+                                    // a,b :: Maybe (Array Number)
+                                    // c   :: Pair Maybe (Array Number)
+                                    //             Maybe (Array Number)
+
+                                    // f a -> f b -> f c :: Number -> Array Number -> Maybe (Array Number) -> 
+                                    //                      Number -> Array Number -> Maybe (Array Number) -> 
+                                    //                        Number -> Array Number -> 
+                                    //                           Pair Maybe (Array Number)
+                                    //                                Maybe (Array Number)
+
+                                    // S.show (((S.lift2 ((S.lift2 (S.Pair)))) 
+                                    //            (S.take) (S.take) (2) ([1,2])))  
+                                    // 'Pair (Just ([1, 2])) (Just ([1, 2]))'
+
             (S.lift2                // (a -> b -> c) -> f a -> f b -> f c
-                                   // (Array Number -> Array Number -> 
-                                   //   Pair (Array Number) (Array Number)) -> 
-              //                        Maybe (Array Number) -> Maybe (Array Number) -> 
-              //                        Maybe (Pair (Array Number) (Array Number))
-              (S.Pair))))             // a -> b -> Pair a b
-                                   // Array Number -> Array Number -> Pair (Array Number) (Array Number)
-              (S.take)    // Maybe (Array Number)
-              (S.drop)   // Maybe (Array Number)
+
+                                    // (a -> b -> c) :: fn -> fn -> Pair fn fn
+                                    
+                                    // f   :: Number ->  
+                                    // a,b :: Array Number -> Maybe (Array Number)
+                                    // c   :: Pair (Array Number -> Maybe (Array Number)) 
+                                    //             (Array Number -> Maybe (Array Number))
+
+                                    // f a -> f b -> f c :: Number -> Array Number -> Maybe (Array Number) -> 
+                                    //                      Number -> Array Number -> Maybe (Array Number) -> 
+                                    //                        Number -> 
+                                    //                           Pair (Array Number -> Maybe (Array Number)) 
+                                    //                                (Array Number -> Maybe (Array Number))
+
+
+              (S.Pair))))           // a -> b -> Pair a b
+
+                                    // (Number -> Array Number -> Maybe (Array Number)) -> 
+                                    // (Number -> Array Number -> Maybe (Array Number)) -> 
+                                    //    Pair 
+                                    //      (Number -> Array Number -> Maybe (Array Number)) 
+                                    //      (Number -> Array Number -> Maybe (Array Number))
+
+              (S.take)              // Number -> Array Number -> Maybe (Array Number)
+              (S.drop)              // Number -> Array Number -> Maybe (Array Number)
 
   // S.show (f3bPairPlusListRemainder (2) ([3,4]))   
   // 'Just (Pair ([3, 4]) ([]))'
 
   console.log()
+
+  //    liftTest :: Number -> Array Number -> Maybe (Array Number)
+  const liftTest =   
+      x => 
+      xs => 
+            S.lift2                 // (a -> b -> c) -> 
+                                    //   f a -> f b -> f c
+                                    
+                                    // f   :: Maybe
+                                    // a,b :: Array Number
+                                    // c   :: Array Number
+
+                                    // Maybe (Array Number) -> Maybe (Array Number) -> 
+                                    //   Maybe (Array Number)
+
+              (S.K)                 // a -> b -> a
+                                    // Maybe (Array Number) -> Maybe (Array Number) -> Maybe (Array Number)
+
+              (S.take (x) (xs))     // Maybe (Array Number)
+              (S.take (x) (xs))     // Maybe (Array Number)
+
+  console.log()
+
+  // S.show (liftTest (2) ([3,4]))   
+  // 'Just ([3, 4])'
+
+  //    liftTest2 :: Number -> Array Number -> Maybe (Array Number)
+  const liftTest2 =   
+      x => 
+      // xs => 
+            (S.lift2
+                                    // (a -> b -> c) :: fn -> fn -> fn
+
+                                    // f   :: Maybe ->
+                                    // a,b :: Array Number
+                                    // c   :: Array Number
+
+                                    // Maybe (Array Number) -> 
+                                    // Maybe (Array Number) -> 
+                                    //   Maybe (Array Number)
+
+            (S.lift2                // (a -> b -> c) -> 
+                                    //   f a -> f b -> f c
+
+                                    // (a -> b -> c) :: fn -> fn -> fn
+                                    
+                                    // f   :: Array Number ->
+                                    // a,b :: Maybe (Array Number)
+                                    // c   :: Maybe (Array Number)
+
+                                    // Array Number -> Maybe (Array Number) -> 
+                                    // Array Number -> Maybe (Array Number) -> 
+                                    //   Array Number -> Maybe (Array Number)
+
+              (S.K)))               // a -> b -> a
+                                    // Array Number -> Maybe (Array Number) -> 
+                                    // Array Number -> Maybe (Array Number) -> 
+                                    //   Array Number -> Maybe (Array Number)
+
+              (S.take (x))          // Array Number -> Maybe (Array Number)
+              (S.take (x))          // Array Number -> Maybe (Array Number)
+
+  console.log()
+
+  // S.show (liftTest2 (2) ([3,4]))   
+  // 'Just ([3, 4])'
+
+  //    liftTest3 :: Number -> Array Number -> Maybe (Array Number)
+  const liftTest3 =   
+      // x => 
+      // xs => 
+            // (S.lift2
+            (S.lift2
+                                    // (a -> b -> c) :: fn -> fn -> fn
+
+                                    // f   :: Maybe ->
+                                    // a,b :: Array Number
+                                    // c   :: Array Number
+
+                                    // Maybe (Array Number) -> 
+                                    // Maybe (Array Number) -> 
+                                    //   Maybe (Array Number)
+
+            (S.lift2                // (a -> b -> c) -> 
+                                    //   f a -> f b -> f c
+
+                                    // (a -> b -> c) :: fn -> fn -> fn
+                                    
+                                    // f   :: Array Number ->
+                                    // a,b :: Maybe (Array Number)
+                                    // c   :: Maybe (Array Number)
+
+                                    // Array Number -> Maybe (Array Number) -> 
+                                    // Array Number -> Maybe (Array Number) -> 
+                                    //   Array Number -> Maybe (Array Number)
+
+              (S.Pair))
+              )
+              // )              // a -> b -> a
+                                    // Array Number -> Maybe (Array Number) -> 
+                                    // Array Number -> Maybe (Array Number) -> 
+                                    //   Array Number -> Maybe (Array Number)
+
+              (S.take)              // Array Number -> Maybe (Array Number)
+              (S.take)              // Array Number -> Maybe (Array Number)
+
+  console.log()
+
+  // S.show (liftTest3 (2) ([3,4]))   
+  // 'Just ([3, 4])'
+
+  const take2 = S.take (2)
+
+  console.log()
+
+  // S.show (S.take (2))  
+  // 'function(x) { ...
+
+  // :: Pair (Array Number -> Maybe (Array Number)) 
+  //         (Array Number -> Maybe (Array Number))
+  // S.show (S.Pair (take2) (take2)) 
+  // 'Pair (function(x) { ...
+
+  // :: Array Number -> 
+  //      Pair Maybe (Array Number) Maybe (Array Number)
+  // S.show ( (S.lift2 (S.Pair)) (take2) (take2))   
+  // 'function(x) { return f (x) (apply (x)); }'
+
+  // S.show ( (S.lift2 (S.Pair)) (take2) (take2) ([1,2]))    
+  // 'Pair (Just ([1, 2])) (Just ([1, 2]))'
+
+  // :: Array Number -> 
+  //      Maybe Pair (Array Number) (Array Number)
+  // S.show ( (S.lift2 (S.lift2 (S.Pair))) (take2) (take2) )    
+  // 'function(x) { return f (x) (apply (x)); }'
+
+  // S.show ( (S.lift2 (S.lift2 (S.Pair))) (take2) (take2) ([1,2]))    
+  // 'Just (Pair ([1, 2]) ([1, 2]))'
+
+
+  // S.show (S.take)  
+  // 'take :: (Applicative f, Foldable f, Monoid f) => Integer -> f a -> Maybe (f a)'
+
+  // S.show (S.Pair (S.take) (S.take))   
+  // 'Pair (take :: (Applicative f, Foldable f, Monoid f) => Integer -> f a -> Maybe (f a)) (take :: (Applicative f, Foldable f, Monoid f) => Integer -> f a -> Maybe (f a))'
+
+  // S.show ( (S.lift2 (S.Pair)) (S.take) (S.take) (2))    
+  // 'Pair (function(x) { ...
+
+  // S.show (( (S.lift2 ((S.lift2 (S.Pair)))) (S.take) (S.take) ) (2) ([1,2]) )  
+  // 'Pair (Just ([1, 2])) (Just ([1, 2]))'
+
+  // S.show (( (S.lift2 (S.lift2 ((S.lift2 (S.Pair))))) (S.take) (S.take) ) (2) ([1,2]) )  
+  // 'Just (Pair ([1, 2]) ([1, 2]))'
+
+// NOTE: a fourth lift creates this function:
+//                        Number -> Array Number -> Maybe Array (Pair Number Number)
+
+//   S.show (( (S.lift2 (S.lift2 (S.lift2 ((S.lift2 (S.Pair)))))) (S.take) (S.take) ) (2) ([1,2]) )  
+// 'Just ([Pair (1) (1), Pair (1) (2), Pair (2) (1), Pair (2) (2)])'
 
   // return x
   // return p1
