@@ -5,8 +5,14 @@ const path          = require ('path');
 // const {Observable} = require('rxjs')
 const { from } = require('rxjs')
 
+const Reader = require('crocks/Reader')
+
+const { State, run: runS, chain: chainS, get: getS, put: putS } = require('monastic')
+
 // const S = require('sanctuary')
 // const {sanctuary} = require('sanctuary')
+
+const Z = require('sanctuary-type-classes')
 
 const $ = require ('sanctuary-def');
 const {create, env: Senv} = require ('sanctuary');
@@ -1058,11 +1064,915 @@ const concatFiles = async path => {
   // S.show (( (S.lift2 (S.lift2 ((S.lift2 (S.Pair))))) (S.take) (S.take) ) (2) ([1,2]) )  
   // 'Just (Pair ([1, 2]) ([1, 2]))'
 
-// NOTE: a fourth lift creates this function:
-//                        Number -> Array Number -> Maybe Array (Pair Number Number)
+  // NOTE: a fourth lift creates this function:
+  //                        Number -> Array Number -> Maybe Array (Pair Number Number)
 
-//   S.show (( (S.lift2 (S.lift2 (S.lift2 ((S.lift2 (S.Pair)))))) (S.take) (S.take) ) (2) ([1,2]) )  
-// 'Just ([Pair (1) (1), Pair (1) (2), Pair (2) (1), Pair (2) (2)])'
+  //   S.show (( (S.lift2 (S.lift2 (S.lift2 ((S.lift2 (S.Pair)))))) (S.take) (S.take) ) (2) ([1,2]) )  
+  // 'Just ([Pair (1) (1), Pair (1) (2), Pair (2) (1), Pair (2) (2)])'
+
+
+
+  // chaining example from:
+  // https://gitter.im/sanctuary-js/sanctuary?at=5fdb2937cb46f45e23866af2
+  // 
+  // NOTE: I've amended the names slightly
+
+  //    toUpper :: String -> Future a String
+  const toUpperF = s => Future.resolve (S.toUpper (s));
+
+  //    length :: String -> Future a Integer
+  const lengthF = s => Future.resolve (s.length);
+
+  //    repeat :: String -> Integer -> Future a String
+  const repeatF = s => n => Future.resolve (s.repeat (n));
+
+  //    stringAndLengthPairF :: String -> Future a (Pair String Integer)
+  const stringAndLengthPairF = s => Future.resolve (S.Pair (s) (s.length));
+
+  //    future :: Future a String
+  const repeatedStringF = (
+    S.chain (
+      s => 
+        S.chain (n => 
+          repeatF (s) (n)
+        )
+        (lengthF (s)) 
+    )
+    (toUpperF ('foo'))
+  );
+
+  // Future.fork (console.error)
+  //             (S.compose (logChainedFut) (S.show))
+  //             (repeatedStringF);
+
+  // this creates code that looks more like the Haskell >>= syntax
+  const chainFlipped = S.flip (S.chain)
+
+  //    future :: Future a String
+  const repeatedStringF2 = (
+    chainFlipped 
+    (toUpperF ('foo'))
+    (
+      s => 
+        chainFlipped 
+        (lengthF (s)) 
+        (
+          n => 
+            repeatF (s) (n)
+        )
+    )
+  );
+
+  const logChainedFut = value => {
+    console.log (`${value}`)
+  }
+
+  // Future.fork (console.error)
+  //             (S.compose (logChainedFut) (S.show))
+  //             (repeatedStringF2);
+
+
+  // NOTE: as code experiment, convert chains to map/join's
+  //       then map/join's to maps
+  //    repeatedStringAsMapsF :: Future a (Future a (Future a String)
+  const repeatedStringAsMapsF = S.pipe ([
+    S.map 
+    (
+      s => 
+        S.pipe ([
+          S.map 
+          (
+            n => 
+              repeatF (s) (n)       // Future a String
+          )                         // Future a (Future a String)
+
+        // , S.join                    // Future a String
+        ])
+        (lengthF (s))             // Future a Integer
+    )                             // Future a (Future a (Future a String)
+
+    // , S.join                      // Future a (Future a String)
+  ]) 
+  (toUpperF ('foo'))              // Future a String
+
+  const mapFlipped = S.flip (S.map)
+
+  // NOTE: same as first version with maps, but remove pipes (as not 
+  // using joins) then use flipped map
+  //    repeatedStringAsMapsF2 :: Future a (Future a (Future a String)
+  const repeatedStringAsMapsF2 = 
+    mapFlipped 
+    (toUpperF ('foo'))              // Future a String
+    (
+      s => 
+        mapFlipped 
+        (lengthF (s))             // Future a Integer
+        (
+          n => 
+            repeatF (s) (n)       // Future a String
+        )                         // Future a (Future a String)
+    )                             // Future a (Future a (Future a String)
+
+  // NOTE: un-nest maps
+  //    repeatedStringAsMapsF3 :: Future a (Future a (Future a String)
+  const repeatedStringAsMapsF3 = S.pipe ([
+    S.map 
+    (
+      s => 
+        // Future.resolve (S.Pair (s) (s.length)) 
+        stringAndLengthPairF (s)
+                                  // Future a (Pair Number String)
+        // (lengthF (s))             // Future a Integer
+    )                             // Future a (Future a (Pair Number String))
+  , S.map (
+      S.map 
+        (
+          pairStringAndLength => 
+            S.pair 
+            (repeatF) (pairStringAndLength)       
+                                  // Future a String
+        )                         // Future a (Future a String)
+    )                             // Future a (Future a (Future a String)
+  ]) 
+  (toUpperF ('foo'))              // Future a String
+
+  // NOTE: re-add joins, then convert map/joins to chain
+  //    repeatedStringAsMapsF4 :: Future a String
+  const repeatedStringAsMapsF4 = S.pipe ([
+    // S.map 
+    S.chain
+    (
+      s => 
+        // Future.resolve (S.Pair (s) (s.length)) 
+        stringAndLengthPairF (s)
+                                  // Future a (Pair Number String)
+        // (lengthF (s))             // Future a Integer
+    )                             // Future a (Pair Number String)
+        // )                             // Future a (Future a (Pair Number String))
+  // , S.join                        // Future a (Pair Number String))
+  , 
+    // S.map (
+    // S.map 
+    S.chain 
+      (
+        pairStringAndLength => {
+          console.log (`pair: ${S.show (pairStringAndLength)}`)
+        
+          return S.pair 
+            (repeatF) (pairStringAndLength)       
+        }                         // Future a String
+      )                           // Future a String
+        // )                           // Future a (Future a String)
+    // )                             // Future a (Future a (Future a String)
+  // , S.join                        // Future a String
+  ]) 
+  (toUpperF ('foo'))              // Future a String
+
+  // NOTE: tidied up version
+  //    repeatedStringAsMapsF5 :: Future a String
+  const repeatedStringAsMapsF5 = S.pipe ([
+    S.chain (s => stringAndLengthPairF (s))               // Future a (Pair Number String)
+  , S.chain (pairStringAndLength => 
+              S.pair (repeatF) (pairStringAndLength))   // Future a String
+  ]) 
+  (toUpperF ('foo'))              // Future a String
+
+  // NOTE: further tidied up version
+  //    repeatedStringAsMapsF5a :: Future a String
+  const repeatedStringAsMapsF5a = S.pipe ([
+    S.chain (stringAndLengthPairF)      // Future a (Pair Number String)
+  , S.chain (S.pair (repeatF))          // Future a String
+  ]) 
+  (toUpperF ('foo'))                    // Future a String
+
+  // handles a nested Future, e.g. Future Error (Future Error (String -> String))
+  const logFut3 = caption => resolveValue => {
+    console.log (`${caption}: ${resolveValue}`)
+
+    Future.fork (logFut ('rej')) (logChainedFut) (resolveValue)
+  }
+
+  Future.fork (console.error)
+              // (S.compose (logFut3 ('res')) (S.show))
+              (
+                // logFut3 ('res')
+                logChainedFut
+                )
+              (
+                // repeatedStringAsMapsF
+                // repeatedStringAsMapsF2
+                // repeatedStringAsMapsF3
+                // repeatedStringAsMapsF4
+                // repeatedStringAsMapsF5
+                repeatedStringAsMapsF5a
+              );
+
+  const monadExperiments = () => {
+
+    // implementation of reader and state monads
+
+    // reader monad - based on Haskell code in:
+    // https://mjoldfield.com/atelier/2014/07/monads-fn.html
+
+
+
+    // type Rdr r a = r -> a
+
+    // type RdrInt a = Rdr Int a
+
+    // returnRdr :: Enum a => a -> RdrInt a 
+    // returnRdr a = \r -> a
+    returnRdr  = a => r => a
+
+    // bindRdr :: RdrInt a -> (a -> RdrInt a) -> RdrInt a
+    // -- bindRdr x f = undefined
+    // bindRdr x f = 
+    //   \r -> f (x r) r
+    bindRdr = x => f => r => {
+      const a = x (r)
+
+      const f1 = f (a)
+
+      const f2 = f1 (r)
+
+      return f2
+    }
+
+    // same fn as bindRdr
+    bindRdrShort = x => f => r => f (x (r)) (r)
+
+    // incR :: Enum a => a -> RdrInt a 
+    // incR c r = toEnum $ r + fromEnum c 
+    const incR = c => r => {
+      const numFromChar = c.charCodeAt(0)
+
+      const newChar = String.fromCharCode(numFromChar + r)
+
+      return newChar
+    }
+
+    const env = 1
+
+    const x = returnRdr ('c')
+
+    console.log (`x: ${x}`)
+    console.log ()
+
+    const y = incR ('c') (env)
+
+    console.log (`y: ${y}`)
+    console.log ()
+
+    const z = bindRdr (incR ('c')) (incR) (env)
+
+    console.log (`z: ${z}`)
+    console.log ()
+
+
+    // incsRB :: Char -> RdrInt Char
+    // incsRB initChar env = (incR initChar `bindRdr` inc2R `bindRdr` decR) env
+
+    const incsRdr = initChar => env => {
+      const incsPart = bindRdr (incR (initChar)) (incR) 
+
+      bindRdr (incsPart) (incR) (env)
+    }
+
+    const z1 = incsRdr ('c') (env)
+
+    console.log (`z1: ${z1}`)
+    console.log ()
+
+
+    const zc = S.chain (incR) (incR ('c'))
+
+    const zc1 = zc (env)
+
+    console.log (`zc1: ${zc1}`)
+    console.log ()
+
+    const zcf = chainFlipped (incR ('c')) (incR)
+
+    const zcf1 = zcf (env)
+
+    console.log (`zcf1: ${zcf1}`)
+    console.log ()
+
+    const incsChain = initChar => env => {
+      const chainPart = chainFlipped (incR (initChar)) (incR)
+
+      const incs = chainFlipped (chainPart) (incR)
+
+      const incs1 = incs (env)
+  
+      console.log (`incs1: ${incs1}`)
+      console.log ()
+    }
+
+    incsChain ('c') (env)
+
+    // reformatted version of incsChain
+    const incsChain2 = initChar => env => {
+      const incs = 
+        chainFlipped 
+          (chainFlipped 
+            (incR (initChar)) 
+            (incR)) 
+          (incR)
+
+      const incs2 = incs (env)
+  
+      console.log (`incs2: ${incs2}`)
+      console.log ()
+    }
+
+    incsChain2 ('c') (env)
+
+    // reformatted version of incsChain2
+    const incsPipeChain = initChar => env => {
+
+      // incsStategPart :: Enum a2 => a2 -> StateInt a2
+      const incsStategPart = initChar => 
+        chainFlipped (incR (initChar)) (incR)
+      
+      const incs = S.pipe ([
+        incsStategPart
+      , chainFlipped
+      // , f => f (incR)
+      , S.T (incR)
+      ]) (initChar);
+
+    // incsStategCompose :: Enum a => a -> StateInt a
+    // incsStategCompose = (\f -> f decStateg) . bindState . incsStategPart
+
+      const incs2 = incs (env)
+  
+      console.log (`incsPipe: ${incs2}`)
+      console.log ()
+    }
+
+    incsPipeChain ('c') (env)
+
+    // reformatted version of incsChain
+    const incsPipeChain2 = initChar => env => {
+
+      const incs = S.pipe ([
+        incR
+      , chainFlipped
+      , S.T (incR)              // same as f => f (incR)
+      , chainFlipped
+      , S.T (incR)    
+      ]) (initChar);
+
+    // incsStategCompose :: Enum a => a -> StateInt a
+    // incsStategCompose = (\f -> f decStateg) . bindState . incsStategPart
+
+      const incs2 = incs (env)
+  
+      console.log (`incsPipe2: ${incs2}`)
+      console.log ()
+    }
+
+    incsPipeChain2 ('c') (env)
+
+    // reformatted version of incsChain
+    const incsPipeChain3 = initChar => env => {
+
+      const incs = S.pipe ([
+        incR
+      , bindRdrShort            // same as chainFlipped
+      , S.T (incR)              // same as f => f (incR)
+      , bindRdrShort
+      , S.T (incR)    
+      ]) (initChar);
+
+    // incsStategCompose :: Enum a => a -> StateInt a
+    // incsStategCompose = (\f -> f decStateg) . bindState . incsStategPart
+
+      const incs2 = incs (env)
+  
+      console.log (`incsPipe3: ${incs2}`)
+      console.log ()
+    }
+
+    incsPipeChain3 ('c') (env)
+
+
+
+    
+    // -- NOTE: experiments mixing bind with compose.
+    // --       Related to JS implemenatation that are more readable
+    // incsStategComposeBit :: Enum a => a -> (a -> StateInt a) -> StateInt a
+    // incsStategComposeBit = bindState . incsStategPart
+    
+    // incsStategCompose :: Enum a => a -> StateInt a
+    // incsStategCompose = (\f -> f decStateg) . bindState . incsStategPart
+    
+    // incsStategCompose' :: Enum a => a -> StateInt a
+    // incsStategCompose' = (&) decStateg . bindState . incsStategPart
+    
+    // incsStategCompose'' :: Enum a => a -> StateInt a
+    // incsStategCompose'' = (\x -> bindState x decStateg) . incsStategPart
+        
+
+
+
+    // Reader implemenation using:
+    // https://crocks.dev/docs/crocks/Reader.html
+    // 
+    // It was mentioned (indirectly) in this Sanctuary gitter chat:
+    // https://gitter.im/sanctuary-js/sanctuary?at=600f893c004fab474165f75d
+    // (the AWS examples use Crocks ReaderT)
+
+        // type Rdr r a = r -> a
+
+    // type RdrInt a = Rdr Int a
+
+    // returnRdr :: Enum a => a -> RdrInt a 
+    // returnRdr a = \r -> a
+    // returnRdr  = a => r => a
+
+    // bindRdr :: RdrInt a -> (a -> RdrInt a) -> RdrInt a
+    // -- bindRdr x f = undefined
+    // bindRdr x f = 
+    //   \r -> f (x r) r
+    // bindRdr = x => f => r => {
+    //   const a = x (r)
+
+    //   const f1 = f (a)
+
+    //   const f2 = f1 (r)
+
+    //   return f2
+    // }
+
+    // NOTE: wrapper to allow Crocks Reader.chain to work in pipe
+    bindReader = fRdr => xRdr => xRdr.chain (fRdr)
+
+    // NOTE: Sanctuary pipe doesn't like Reader (or something like that)
+    const pipe = (...pips) => x => pips.reduce((prev, fn) => fn(prev), x)
+
+    // same fn as bindRdr
+    // bindRdrShort = x => f => r => f (x (r)) (r)
+
+    // incR :: Enum a => a -> RdrInt a 
+    // incR c r = toEnum $ r + fromEnum c 
+    // const incRC = c => r => {
+    //   const numFromChar = c.charCodeAt(0)
+
+    //   const newChar = String.fromCharCode(numFromChar + r)
+
+    //   return newChar
+    // }
+
+    // const env = 1
+
+    // const x = returnRdr ('c')
+
+    // console.log (`x: ${x}`)
+    // console.log ()
+
+    // const y = incR ('c') (env)
+
+    // console.log (`y: ${y}`)
+    // console.log ()
+
+    // const z = bindRdr (incR ('c')) (incR) (env)
+
+    // console.log (`z: ${z}`)
+    // console.log ()
+
+
+    const rdrIncR = c => {
+      const partialIncR = incR (c)
+
+      const rdr = Reader (partialIncR)
+
+      return rdr
+    }
+
+    const incsPipeChain4 = initChar => env => {
+
+      // const rdrIncOnce = Reader (incR (initChar))
+
+      const rdrIncs = rdrIncR (initChar)
+      .chain (rdrIncR)
+      .chain (rdrIncR)
+
+      const incs = rdrIncs.runWith (env)
+  
+      console.log (`incsPipe4: ${incs}`)
+      console.log ()
+    }
+
+    incsPipeChain4 ('c') (env)
+
+
+    const incsPipeChain5 = initChar => env => {
+
+      const rdrIncs = pipe (
+        rdrIncR
+      , bindReader (rdrIncR)
+      , bindReader (rdrIncR)
+      )(initChar)
+
+      const incs = rdrIncs.runWith (env)
+  
+      console.log (`incsPipe5: ${incs}`)
+      console.log ()
+    }
+
+    incsPipeChain5 ('c') (env)
+
+
+
+
+
+
+
+    // -- simple version of State monad
+    // -- roughly similar to:
+    // -- p244 Real World Haskell (==>)
+    
+    // type Ste s a = s -> (a, s)
+    
+    // type SteInt a = Ste Int a 
+    
+    // returnSte :: Enum a => a -> SteInt a
+    // returnSte a = \s -> (a, s)
+
+    const tupleStateCreate = a => s => ({ fst: a, snd: s })
+
+    const returnState = a => s => tupleStateCreate (a) (s)
+    
+    // bindSte :: (Enum a, Enum b) => SteInt a -> (a -> SteInt b) -> SteInt b
+    // bindSte x f = 
+    //   \s -> 
+    //         let 
+    //           (a, s') = x s
+    //           (a', s'') = f a s'
+    //         in 
+    //           (a', s'')            
+
+    // bindRdrShort = x => f => r => f (x (r)) (r)
+
+    bindState = x => f => s => {
+      const {fst: a, snd: s1} = x (s) 
+
+      const {fst: a1, snd: s2} = f (a) (s1)
+
+      return tupleStateCreate (a1) (s2)
+    }
+    
+    // incSte :: Enum a => a -> SteInt a 
+    // incSte c =  \s -> 
+    //               let a = toEnum $ s + fromEnum c 
+    //               in
+    //                 (a, s) 
+
+    const incState = c => s => {
+      const numFromChar = c.charCodeAt(0)
+
+      const newChar = String.fromCharCode(numFromChar + s)
+
+      return tupleStateCreate (newChar) (s)
+    }
+
+    // incsSte :: Char -> SteInt Char
+    // incsSte initChar s = (incSte initChar `bindSte` inc2Ste `bindSte` decSte) s
+    
+    const incsState = initChar => s => {
+      const bindPart1 = bindState (incState (initChar)) (incState)
+
+      const bindx = bindState (bindPart1) (incState)
+
+      const incsState1 = bindx (s)
+
+      // const incsState1 = incs (env)
+  
+      console.log (`incsState1: ${S.show (incsState1)}`)
+      console.log ()
+
+      // return 
+
+    }
+
+    incsState ('c') (1)
+
+
+
+    // TODO 
+    // above with S.chain, bindStateShort
+    // then
+    // getState, putState, incStateg 
+    
+    // some example that updates state, maybe a count of increments
+
+
+    // NOTE: Sanctuary needs a State type for S.chain to work.
+    // This version uses State from:
+    // https://github.com/dicearr/monastic
+    // NOTE: However, only Sanctuary type classes, Z.chain,
+    //       can be used.
+
+    // const tupleStateCreate = a => s => ({ fst: a, snd: s })
+
+    // const returnState = a => s => tupleStateCreate (a) (s)
+
+    const returnS = a => Z.of (State, a)
+    // const returnS = a => S.of (State) (a)
+
+    // NOTE: wrapper for easy use of State.chain
+    // const bindS = x => f => x.chain (f)
+    const bindS = x => f => x["fantasy-land/chain"] (f)
+          // (incS (initChar))["fantasy-land/chain"](incS).run (1)
+
+    // NOTE: wrapper to allow State.chain to work in pipe
+    const bindSFlip = S.flip (bindS)
+    
+    // bindSte :: (Enum a, Enum b) => SteInt a -> (a -> SteInt b) -> SteInt b
+    // bindSte x f = 
+    //   \s -> 
+    //         let 
+    //           (a, s') = x s
+    //           (a', s'') = f a s'
+    //         in 
+    //           (a', s'')            
+
+    // bindRdrShort = x => f => r => f (x (r)) (r)
+
+    // bindState = x => f => s => {
+    //   const {fst: a, snd: s1} = x (s) 
+
+    //   const {fst: a1, snd: s2} = f (a) (s1)
+
+    //   return tupleStateCreate (a1) (s2)
+    // }
+
+    // const bindS = x => f => s => {
+    //   chainS (f, x)
+    // }
+
+    // NOTE: this matches Haskell runState - given a state, it 
+    //       provides the function that produces the result, newState pair.
+    const runFlip = S.flip (runS)
+    // or
+    // const runFlip = aState => s => runS (s) (aState)
+
+    const incSimpleState = c => s => {
+      const numFromChar = c.charCodeAt(0)
+
+      const newChar = String.fromCharCode(numFromChar + s)
+
+      return { state: s, value: newChar }
+    }
+
+    const incS = c => {      
+      const stS = State (incSimpleState (c))
+
+      return stS
+    }
+
+    const incSAlt = c => {
+      const g = getS
+
+      const f = c => s => {
+        return incS (c)
+      }
+
+      // NOTE: this fn works like this, but it's more like \_ -> incS (c)
+      //       as s param isn't used. 
+      //       Probably want something like:
+
+//       decStateg :: Enum a => a -> StateInt a
+// decStateg c = getState `bindState` \s -> 
+//   let (a, _) = runState (incState c) (-s)
+//   in  
+//     returnState a
+
+      const i = bindS (g) (f (c))
+
+      return i
+    }
+
+    const decS = c => {
+      const r = bindS (getS) 
+        (s => {
+          const { state, value } = runFlip (incS (c)) (-s)
+
+          // NOTE: this works whether it ignores param, as (),
+          //       or uses param, as s. Not sure if one use
+          //       is more idiomatic. Ignoring param is a little
+          //       like putS, so maybe should use that explicitly.
+          return State (
+            // () 
+            s => {          
+            return { state: s, value }
+          })
+        })
+
+      //   decStateg :: Enum a => a -> StateInt a
+      //   decStateg c = getState `bindState` \s -> 
+      //   let (a, _) = runState (incState c) (-s)
+      //   in  
+      //     returnState a
+
+      return r
+    }
+    
+    const decSAltReturn = c => {
+      const r = bindS (getS) 
+        (s => {
+          const { state, value } = runFlip (incS (c)) (-s)
+
+          const r = returnS (value)
+
+          // NOTE: This works, but not sure if it's idiomatic
+          //       not to call putS. Still, uses the second s from getS,
+          //       and here the state is meant to remain unchanged,
+          //       so maybe it is idiomatic.
+          return r 
+      })
+
+      //   decStateg :: Enum a => a -> StateInt a
+      //   decStateg c = getState `bindState` \s -> 
+      //   let (a, _) = runState (incState c) (-s)
+      //   in  
+      //     returnState a
+
+      return r
+    }
+    
+    const decSAltPut = c => {
+      const r = bindS (getS) 
+        (s => {
+          const { state, value } = runFlip (incS (c)) (-s)
+
+          // NOTE: This works, but not sure if it's over-working
+          //       things just to call putS. 
+          //       Perhaps it'll be clearer when working with a
+          //       state that is changed.
+          const r = bindS (putS (s)) (() => {
+            const r1 = returnS (value)
+
+            // for debugging, use this rather than returnS
+            // const r1 = State (s => {          
+            //   return { state: s, value }
+            // })
+  
+            return r1
+          })
+    
+          return r
+      })
+
+      //   decStateg :: Enum a => a -> StateInt a
+      //   decStateg c = getState `bindState` \s -> 
+      //   let (a, _) = runState (incState c) (-s)
+      //   in  
+      //     returnState a
+
+      return r
+    }
+    
+    const incsS = initChar => s => {
+
+      const basicState = returnS (initChar)
+
+      // runFlip (basicState) (1)
+      // {state: 1, value: 'c'}
+
+
+      // simple state fn
+      const st = a => s => ({state: s, value: a})
+
+      const simple1 = State (st ('c'))   // this works with run (1)
+                                    // and seems valid
+                                    // (type has correct, single, param)
+
+      // runFlip (simple1) (1) 
+      // {state: 1, value: 'c'}
+
+      const simple2 = State (st)        // this works with run ('c') (1)
+                                    // doesn't feel valid, though
+                                    // (type doesn't seem right with 
+                                    // extra param)
+      // runFlip (simple2) ('c') 
+      // s => ({state: s, value: a})
+
+      // runFlip (simple2) ('c') (1)
+      // {state: 1, value: 'c'}
+                              
+      const incState1 = incS (initChar)     // works
+      // const incState1 = runS (initChar) (getS)
+
+      const incResult = runS (s) (incState1)        // works
+
+      // runS (s) (incState1)
+      // {state: 1, value: 'd'}
+
+      const incResult1 = runFlip (incState1) (s)
+
+      // runFlip (incState1) (s)
+      // {state: 1, value: 'd'}
+
+      // const a1 = runFlip (getS) (initChar)
+      const a1 = runFlip (getS) (s)
+
+      const a2 = runFlip (incSAlt (initChar)) (1)
+
+      // runFlip (incSAlt (initChar)) (1)
+      // {state: 1, value: 'd'}
+
+      // runFlip (getS) (s)
+      // {state: 1, value: 1}
+
+      // incsSte :: Char -> SteInt Char
+// incsSte initChar s = (incSte initChar `bindSte` inc2Ste `bindSte` decSte) s
+
+      // State.prototype.fantasy-land/chain :: State s a ~> (a -⁠> State s b) -⁠> State s b
+
+      const zc = Z.chain
+
+      const n = Z.chain (incS, incS (initChar)) 
+      const n1 = zc (incS, incS (initChar)) 
+
+      // Z.chain (incS, incS (initChar)) 
+      // State {run: ƒ}
+      // zc (incS, incS (initChar)) 
+      // State {run: ƒ}
+
+      const nRes = n.run (1)
+      const nRes1 = n1.run (1)
+
+      // n.run (1)
+      // {state: 1, value: 'e'}
+
+      // n1.run (1) 
+      // {state: 1, value: 'e'}
+
+
+      // NOTE: S.chain (and so, chainFlipped) fails (with .run (1))
+      //       as the types are rejected
+      // const p1 = chainFlipped (incS (initChar)) (incS)   // fails
+
+      // const x = p1 (s)
+
+      // const incs = S.chain (incState) (p1)
+
+      // const incs2 = incs (s)
+
+      const p1a = bindS (incS (initChar)) (incS) 
+
+      const p1b = (incS (initChar))["fantasy-land/chain"](incS)
+
+      const res1a = p1a.run (1)
+      const res1b = p1b.run (1)
+
+      // p1a.run (1)
+      // {state: 1, value: 'e'}
+
+      // (incS (initChar))["fantasy-land/chain"](incS).run (1)
+      // {state: 1, value: 'e'}
+
+      const incsS = bindS (p1a) (incS)
+
+      // runFlip (incsS) (1) 
+      // {state: 1, value: 'f'}
+
+      const y = runS (s) (incsS)
+      const y1 = runFlip (incsS) (s)
+
+      console.log (`incsState2 y: ${S.show (y1)}`)
+      console.log ()
+
+      // const p2 = pipe (
+      const p2 = S.pipe ([
+        incS
+        // () => getS
+      , bindSFlip (incS)
+      , bindSFlip (incS)
+      // , bindSFlip (decS)
+      // , bindSFlip (decSAltReturn)
+      , bindSFlip (decSAltPut)
+      ]) (initChar)
+
+      const p2Res = runFlip (p2) (1)
+
+      console.log (`incsState2 p2: ${S.show (p2Res)}`)
+      console.log ()
+
+
+    }
+
+    incsS ('c') (1)
+
+
+  }
+
+  monadExperiments()
+
+
 
   // return x
   // return p1
