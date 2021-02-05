@@ -1689,6 +1689,9 @@ const concatFiles = async path => {
 
     // NOTE: wrapper to allow State.chain to work in pipe
     const bindSFlip = S.flip (bindS)
+
+    // equivalent to (>>)
+    const bindSNoValue = x => f => x["fantasy-land/chain"] (() => f)
     
     // bindSte :: (Enum a, Enum b) => SteInt a -> (a -> SteInt b) -> SteInt b
     // bindSte x f = 
@@ -1718,6 +1721,10 @@ const concatFiles = async path => {
     const runFlip = S.flip (runS)
     // or
     // const runFlip = aState => s => runS (s) (aState)
+
+    // 
+    // NOTE: State type is Int
+    // 
 
     const incSimpleState = c => s => {
       const numFromChar = c.charCodeAt(0)
@@ -1764,6 +1771,12 @@ const concatFiles = async path => {
           //       or uses param, as s. Not sure if one use
           //       is more idiomatic. Ignoring param is a little
           //       like putS, so maybe should use that explicitly.
+          // 
+          // NOTE: With this state/fns, the state is unchanged, so
+          //       perhaps no need for putS (this doesn't answer whether 
+          //       to ignore param). 
+          //       However, for state/fns below, which maintain a count of
+          //       changes, putS is needed and feels idiomatic.
           return State (
             // () 
             s => {          
@@ -1835,6 +1848,8 @@ const concatFiles = async path => {
       return r
     }
     
+    // NOTE: this ended up being a useful mix of code samples rather
+    //       than a fn that returns a State itself.
     const incsS = initChar => s => {
 
       const basicState = returnS (initChar)
@@ -1957,7 +1972,7 @@ const concatFiles = async path => {
       , bindSFlip (decSAltPut)
       ]) (initChar)
 
-      const p2Res = runFlip (p2) (1)
+      const p2Res = runFlip (p2) (s)
 
       console.log (`incsState2 p2: ${S.show (p2Res)}`)
       console.log ()
@@ -1967,6 +1982,105 @@ const concatFiles = async path => {
 
     incsS ('c') (1)
 
+    // 
+    // NOTE: State type is { count: Int, increment: Int }
+    // 
+
+    const incCountedStateS = c => bindS (getS) (s => {
+        const { count, increment } = s
+        const newState = { count: count + 1, increment }
+
+        const numFromChar = c.charCodeAt(0)
+        const newChar = String.fromCharCode(numFromChar + increment)
+
+        // NOTE: bindSNoValue is equivalent to (>>), which simplifies
+        //       second param, which otherwise would be () => returnS (newChar).
+        return bindSNoValue (putS (newState)) (returnS (newChar))
+      })
+
+    const decCountedStateS = c => bindS (getS) (s => {
+        const { count, increment } = s
+        const newState = { count: count + 1, increment }
+        const { state, value } = runFlip (incCountedStateS (c)) ({ count, increment: -increment })
+
+        return bindSNoValue (putS (newState)) (returnS (value))
+    })
+    
+    const incCountedStateSAnnotated = c => {
+      const r = bindS (getS) (s => {
+        const { count, increment } = s
+        const newState = { count: count + 1, increment }
+
+        const numFromChar = c.charCodeAt(0)
+        const newChar = String.fromCharCode(numFromChar + increment)
+
+        const r1 = bindSNoValue (putS (newState)) (() => {
+          const r2 = returnS (newChar)
+
+          return r2
+        })
+
+        return r1
+      })
+
+      return r
+    }
+
+    const decCountedStateSAnnotated = c => {
+      const r = bindS (getS) 
+        (s => {
+          const { count, increment } = s
+          const newState = { count: count + 1, increment }
+          const { state, value } = runFlip (incCountedStateS (c)) ({ count, increment: -increment })
+
+          // NOTE: This state/fns change the state, so use of putS is 
+          //       necessary and feels idiomatic (contrary to comments for other
+          //       state/fns above).
+          const r1 = bindS (putS (newState)) (() => {
+            const r2 = returnS (value)
+
+            // for debugging, use this rather than returnS
+            // const r1 = State (s => {          
+            //   return { state: s, value }
+            // })
+  
+            return r2
+          })
+    
+          return r1
+      })
+
+      //   decStateg :: Enum a => a -> StateInt a
+      //   decStateg c = getState `bindState` \s -> 
+      //   let (a, _) = runState (incState c) (-s)
+      //   in  
+      //     returnState a
+
+      return r
+    }
+    
+    // NOTE: this ended up being a useful mix of code samples rather
+    //       than a fn that returns a State itself.
+    const incsCountedStateS = initChar => s => {
+      const p = S.pipe ([ 
+        incCountedStateS
+      , bindSFlip (incCountedStateS)
+      , bindSFlip (decCountedStateS)
+      ]) 
+      (initChar)
+
+      const pRes = runFlip (p) (s)
+
+      console.log (`incsCountedStateS p: ${S.show (pRes)}`)
+      console.log ()
+
+    }
+
+    incsCountedStateS ('c') ({ count: 0, increment: 1 })
+
+    // TODO return State from incsCountedStateS and run it there
+    // NOTE: although don't seem to have done this above at all.
+    //       But it should be chainable, like other fns? Probably
 
   }
 
